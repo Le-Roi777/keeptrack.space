@@ -20,7 +20,6 @@ or mirrored at any other location without the express written permission of the 
 ///////////////////////////////////////////////////////////////////////////// */
 
 // Public Variables
-var canvasDOM = $('#keeptrack-canvas');
 try {
   var recorder = new CanvasRecorder(document.getElementById('canvas'));
 } catch (e){
@@ -267,7 +266,7 @@ var isAnalysisMenuOpen = false;
     (function _canvasController () {
       db.log('_canvasController');
       var latLon;
-      canvasDOM.on('touchmove', function (evt) {
+      canvasDOM2.on('touchmove', function (evt) {
         evt.preventDefault();
         if (isPinching) {
           var currentPinchDistance = Math.hypot(
@@ -291,7 +290,7 @@ var isAnalysisMenuOpen = false;
           }, 250);
         }
       });
-      canvasDOM.on("mousemove", function (evt) {
+      canvasDOM2.on("mousemove", function (evt) {
         mouseX = evt.clientX;
         mouseY = evt.clientY;
         if (isDragging && screenDragPoint[0] !== mouseX && screenDragPoint[1] !== mouseY) {
@@ -305,7 +304,7 @@ var isAnalysisMenuOpen = false;
           isMouseMoving = false;
         }, 250);
       });
-      canvasDOM.on('wheel', function (evt) {
+      canvasDOM2.on('wheel', function (evt) {
         var delta = evt.originalEvent.deltaY;
         if (evt.originalEvent.deltaMode === 1) {
           delta *= 33.3333333;
@@ -330,14 +329,14 @@ var isAnalysisMenuOpen = false;
           webGlInit();
         }
       });
-      canvasDOM.on("click", function (evt) {
+      canvasDOM2.on("click", function (evt) {
         rightBtnMenuDOM.hide();
         _clearRMBSubMenu();
         if ($('#colorbox').css('display') === 'block') {
           $.colorbox.close(); // Close colorbox if it was open
         }
       });
-      canvasDOM.on("mousedown", function (evt) {
+      canvasDOM2.on("mousedown", function (evt) {
         if (speedModifier === 1) {
           settingsManager.cameraMovementSpeed = 0.003;
           settingsManager.cameraMovementSpeedMin = 0.005;
@@ -358,7 +357,7 @@ var isAnalysisMenuOpen = false;
         // TODO: Make uiManager.updateURL() a setting that is disabled by default
         uiManager.updateURL();
       });
-      canvasDOM.on('touchstart', function (evt) {
+      canvasDOM2.on('touchstart', function (evt) {
         settingsManager.cameraMovementSpeed = 0.0001;
         settingsManager.cameraMovementSpeedMin = 0.0001;
         if (evt.originalEvent.touches.length > 1) { // Two Finger Touch
@@ -390,7 +389,7 @@ var isAnalysisMenuOpen = false;
           uiManager.updateURL();
         }
       });
-      canvasDOM.on("mouseup", function (evt) {
+      canvasDOM2.on("mouseup", function (evt) {
         if (!dragHasMoved) {
           if (settingsManager.isMobileModeEnabled) {
             mouseSat = getSatIdFromCoord(mouseX, mouseY);
@@ -549,8 +548,8 @@ var isAnalysisMenuOpen = false;
         rightBtnMenuDOM.show();
         satHoverBoxDOM.hide();
         // Might need to be adjusted if number of menus change
-        var offsetX = (mouseX < (canvasDOM.innerWidth() / 2)) ? 0 : -100;
-        var offsetY = (mouseY < (canvasDOM.innerHeight() / 2)) ? 0 : (numMenuItems * -50);
+        var offsetX = (mouseX < (canvasDOM2.innerWidth() / 2)) ? 0 : -100;
+        var offsetY = (mouseY < (canvasDOM2.innerHeight() / 2)) ? 0 : (numMenuItems * -50);
         rightBtnMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -560,7 +559,7 @@ var isAnalysisMenuOpen = false;
         });
       }
 
-      canvasDOM.on('touchend', function (evt) {
+      canvasDOM2.on('touchend', function (evt) {
         let touchTime = (Date.now() - touchStartTime);
 
         if (touchTime > 250) {
@@ -892,12 +891,12 @@ var isAnalysisMenuOpen = false;
       bodyDOM.on('keypress', _keyHandler); // On Key Press Event Run _keyHandler Function
       bodyDOM.on('keydown', _keyDownHandler); // On Key Press Event Run _keyHandler Function
       bodyDOM.on('keyup', _keyUpHandler); // On Key Press Event Run _keyHandler Function
-      canvasDOM.attr('tabIndex', 0);
-      canvasDOM.trigger("focus");
+      canvasDOM2.attr('tabIndex', 0);
+      canvasDOM2.trigger("focus");
 
       rightBtnSaveDOM.hover(function () {
         _clearRMBSubMenu();
-        var offsetX = (rightBtnSaveDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnSaveDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnSaveMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -917,7 +916,7 @@ var isAnalysisMenuOpen = false;
 
       rightBtnViewDOM.hover(function () {
         _clearRMBSubMenu();
-        var offsetX = (rightBtnViewDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnViewDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnViewMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -938,7 +937,7 @@ var isAnalysisMenuOpen = false;
       rightBtnEditDOM.hover(function () {
         _clearRMBSubMenu();
 
-        var offsetX = (rightBtnEditDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnEditDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnEditMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -959,7 +958,7 @@ var isAnalysisMenuOpen = false;
       rightBtnCreateDOM.hover(function () {
         _clearRMBSubMenu();
 
-        var offsetX = (rightBtnCreateDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnCreateDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnCreateMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -979,7 +978,7 @@ var isAnalysisMenuOpen = false;
 
       rightBtnDrawDOM.hover(function () {
         _clearRMBSubMenu();
-        var offsetX = (rightBtnDrawDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnDrawDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnDrawMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -999,7 +998,7 @@ var isAnalysisMenuOpen = false;
 
       rightBtnColorsDOM.hover(function () {
         _clearRMBSubMenu();
-        var offsetX = (rightBtnColorsDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnColorsDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnColorsMenuDOM.css({
           display: 'block',
           'text-align': 'center',
@@ -1019,7 +1018,7 @@ var isAnalysisMenuOpen = false;
 
       rightBtnEarthDOM.hover(function () {
         _clearRMBSubMenu();
-        var offsetX = (rightBtnEarthDOM.offset().left < (canvasDOM.innerWidth() / 2)) ? 165 : -165;
+        var offsetX = (rightBtnEarthDOM.offset().left < (canvasDOM2.innerWidth() / 2)) ? 165 : -165;
         rightBtnEarthMenuDOM.css({
           display: 'block',
           'text-align': 'center',

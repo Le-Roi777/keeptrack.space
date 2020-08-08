@@ -7,12 +7,6 @@
 
 */
 
-var RADIUS_OF_DRAW_SUN = 2200;
-var SUN_SCALAR_DISTANCE = 250000;
-
-var RADIUS_OF_DRAW_MOON = 4500;
-var MOON_SCALAR_DISTANCE = 75000;
-
 (function () {
   var sun = {};
   sun.sunvar = {};

@@ -32,6 +32,7 @@ document.write('<script src="' + settingsManager.installDirectory + 'js/earth.js
 document.write('<script src="' + settingsManager.installDirectory + 'js/groups.js?v=' + settingsManager.versionNumber + '"\><\/script>');
 document.write('<script src="' + settingsManager.installDirectory + 'js/lookangles.js?v=' + settingsManager.versionNumber + '"\><\/script>');
 document.write('<script src="' + settingsManager.installDirectory + 'js/satSet.js?v=' + settingsManager.versionNumber + '"\><\/script>');
+document.write('<script src="' + settingsManager.installDirectory + 'js/canvasManager.js?v=' + settingsManager.versionNumber + '"\><\/script>');
 document.write('<script src="' + settingsManager.installDirectory + 'modules/satVmagManager.js?v=' + settingsManager.versionNumber + '"\><\/script>');
 // Load Extra Variables
 document.write('<script src="' + settingsManager.installDirectory + 'js/objectManager.js?v=' + settingsManager.versionNumber + '"\><\/script>');

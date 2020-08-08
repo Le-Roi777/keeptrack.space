@@ -441,6 +441,10 @@ if (typeof $ == 'undefined') {
 }
 
 // Import CSS needed for loading screen
+document.write(`<script type="module">
+                  import * as THREE from '${settingsManager.installDirectory}js/lib/three.module.js';
+                  window.THREE = THREE;
+                </script>`);
 document.write('<link rel="stylesheet" href="' + settingsManager.installDirectory + 'css/loading-screen.css?v=' + settingsManager.versionNumber + '" type="text/css"\>');
 // Import Fonts
 document.write('<link rel="stylesheet" href="' + settingsManager.installDirectory + 'css/fonts.css?v=' + settingsManager.versionNumber + '" type="text/css"\>');

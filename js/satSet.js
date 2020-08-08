@@ -22,36 +22,34 @@ or mirrored at any other location without the express written permission of the 
 ///////////////////////////////////////////////////////////////////////////// */
 
 var satSensorMarkerArray = [];
+var satData;
+
+var satCruncher = {};
+var limitSats = settingsManager.limitSats;
+
+var satSet = {};
+var dotShader;
+var satPosBuf;
+var satColorBuf;
+var starBuf;
+
+// Removed to reduce garbage collection
+var buffers;
+var pickColorBuf;
+var pickableBuf;
+
+var uFOVi;  // Update FOV function iteration i variable
+var uFOVs;  // Update FOV function iteration S variable
+
+var emptyMat4 = mat4.create();
+
+var satPos;
+var satVel;
+var satInView;
+var satInSun;
+var satExtraData;
+var hoveringSat = -1;
 (function () {
-  var TAU = 2 * Math.PI;
-  var RAD2DEG = 360 / TAU;
-
-  var satCruncher = {};
-  var limitSats = settingsManager.limitSats;
-
-  var satSet = {};
-  var dotShader;
-  var satPosBuf;
-  var satColorBuf;
-  var starBuf;
-
-  // Removed to reduce garbage collection
-  var buffers;
-  var pickColorBuf;
-  var pickableBuf;
-
-  var uFOVi;  // Update FOV function iteration i variable
-  var uFOVs;  // Update FOV function iteration S variable
-
-  var emptyMat4 = mat4.create();
-
-  var satPos;
-  var satVel;
-  var satInView;
-  var satInSun;
-  var satData;
-  var satExtraData;
-  var hoveringSat = -1;
 
   try {
     $('#loader-text').text('Locating ELSETs...');
@@ -1435,6 +1433,7 @@ var satSensorMarkerArray = [];
 
   satSet.onCruncherReady = () => {
     db.log('satSet.onCruncherReady',true);
+    canvasManager.start();
     satSet.queryStr = window.location.search.substring(1);
     // searchBox.init(satData);
     satSet.satDataString = null; // Clears stringified json file and clears 7MB of memory.
