@@ -11,15 +11,13 @@
 (function () {
   var NUM_SEGS = 255;
 
-  var glBuffers = [];
   var inProgress = [];
 
   var orbitDisplay = {};
 
   var pathShader;
 
-  var selectOrbitBuf;
-  var hoverOrbitBuf;
+  orbitDisplay.glBuffers = [];
 
   var selectColor = settingsManager.orbitSelectColor;
   var hoverColor = settingsManager.orbitHoverColor;
@@ -39,17 +37,17 @@
   orbitDisplay.init = function () {
     orbitDisplay.material = new THREE.LineBasicMaterial( { color: 0x0000ff } );
 
-    selectOrbitBuf = new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
-    hoverOrbitBuf = new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
-    canvasManager.scene.add(selectOrbitBuf);
-    canvasManager.scene.add(hoverOrbitBuf);
+    orbitDisplay.selectOrbitBuf = new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
+    orbitDisplay.hoverOrbitBuf = new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
+    canvasManager.scene.add(orbitDisplay.selectOrbitBuf);
+    canvasManager.scene.add(orbitDisplay.hoverOrbitBuf);
 
-    glBuffers = new THREE.Group();
+    orbitDisplay.glBuffers = new THREE.Group();
     for (var i = 0; i < satSet.missileSats; i++) {
-      glBuffers.add(allocateBuffer());
-      glBuffers.children[i].visible = false;
+      orbitDisplay.glBuffers.add(allocateBuffer());
+      orbitDisplay.glBuffers.children[i].visible = false;
     }
-    canvasManager.scene.add(glBuffers);
+    canvasManager.scene.add(orbitDisplay.glBuffers);
 
 
     orbitWorker.postMessage({
@@ -105,9 +103,8 @@
   };
 
   orbitWorker.onmessage = function (m) {
-    glBuffers.children[m.data.satId].geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array(m.data.pointsOut), 3 ));
-    glBuffers.children[m.data.satId].geometry.attributes.position.needsUpdate = true;
-    glBuffers.children[m.data.satId].visible = true;
+    orbitDisplay.glBuffers.children[m.data.satId].geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array(m.data.pointsOut), 3 ));
+    orbitDisplay.glBuffers.children[m.data.satId].geometry.attributes.position.needsUpdate = true;
     inProgress[m.data.satId] = false;
   };
 
@@ -118,9 +115,9 @@
 
   orbitDisplay.clearSelectOrbit = function () {
     currentSelectId = -1;
-    selectOrbitBuf.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
-    selectOrbitBuf.geometry.attributes.position.needsUpdate = true;
-    selectOrbitBuf.visible = false;
+    orbitDisplay.selectOrbitBuf.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
+    orbitDisplay.selectOrbitBuf.geometry.attributes.position.needsUpdate = true;
+    orbitDisplay.selectOrbitBuf.visible = false;
   };
 
   orbitDisplay.addInViewOrbit = function (satId) {
@@ -157,15 +154,37 @@
   orbitDisplay.clearHoverOrbit = function (satId) {
     if (currentHoverId === -1) return;
     currentHoverId = -1;
-    hoverOrbitBuf.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
-    hoverOrbitBuf.visible = false;
-    hoverOrbitBuf.geometry.attributes.position.needsUpdate = true;
+    orbitDisplay.hoverOrbitBuf.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
+    orbitDisplay.hoverOrbitBuf.visible = false;
+    orbitDisplay.hoverOrbitBuf.geometry.attributes.position.needsUpdate = true;
   };
 
   orbitDisplay.draw = function (pMatrix, camMatrix) { // lol what do I do here
     if (!initialized) return;
 
+    if (currentSelectId !== -1 && !satSet.getSatExtraOnly(currentSelectId).static) {
+      // gl.uniform4fv(pathShader.uColor, selectColor);
+      orbitDisplay.glBuffers.children[currentSelectId].visible = true;
+    }
 
+    if (currentHoverId !== -1 && currentHoverId !== currentSelectId && !satSet.getSatExtraOnly(currentHoverId).static) { // avoid z-fighting
+      // gl.uniform4fv(pathShader.uColor, hoverColor);
+      orbitDisplay.glBuffers.children[currentHoverId].visible = true;
+    }
+
+    if (currentInView.length >= 1) { // There might be some z-fighting
+      // gl.uniform4fv(pathShader.uColor, inViewColor);
+      currentInView.forEach(function (id) {
+        orbitDisplay.glBuffers.children[id].visible = true;
+      });
+    }
+
+    if (groups.selectedGroup !== null && !settingsManager.isGroupOverlayDisabled) {
+      // gl.uniform4fv(pathShader.uColor, groupColor);
+      groups.selectedGroup.forEach(function (id) {
+        orbitDisplay.glBuffers.children[id].visible = true;
+      });
+    }
 
     // Done drawing
     return true;

@@ -271,7 +271,7 @@ canvasManager.start = () => {
     canvasManager.initEarth();
     canvasManager.initMoon();
     canvasManager.initSun();
-    canvasManager.initSats();    
+    canvasManager.initSats();
 
     var time, drawNow, dt;
 
@@ -454,6 +454,12 @@ canvasManager.start = () => {
       _drawSat(renderTime);
 
       _updateHover();
+      orbitDisplay.glBuffers.traverseVisible(function(child) {
+         if (child.type !== 'Group') {
+            child.visible = false;
+         }
+      });
+      orbitDisplay.draw();
 
       canvasManager.camera.position.z =_getCamDist();
 
