@@ -119,14 +119,21 @@
       }
     }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, colorData, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.pickableBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, pickableData, gl.STATIC_DRAW);
-    return {
-      colorBuf: this.colorBuf,
-      pickableBuf: this.pickableBuf
-    };
+    if (canvasManager.isReady) {
+      satBuf.setAttribute(
+        'color',
+        new THREE.BufferAttribute(new Float32Array(colorData), 4));
+      satBuf.setAttribute(
+        'pickable',
+        new THREE.BufferAttribute(new Float32Array(pickableData), 1));
+
+      return {
+        colorBuf: satBuf,
+        pickableBuf: this.pickableBuf
+      };
+    } else {
+      return false;
+    }
   };
 
   ColorScheme.reloadColors = function () {

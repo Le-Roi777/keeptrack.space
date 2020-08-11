@@ -37,38 +37,21 @@
   var initialized = false;
 
   orbitDisplay.init = function () {
-    // var startTime = performance.now();
+    orbitDisplay.material = new THREE.LineBasicMaterial( { color: 0x0000ff } );
 
-    var vs = gl.createShader(gl.VERTEX_SHADER);
-    gl.shaderSource(vs, shaderLoader.getShaderCode('path-vertex.glsl'));
-    gl.compileShader(vs);
+    selectOrbitBuf = new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
+    hoverOrbitBuf = new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
+    canvasManager.scene.add(selectOrbitBuf);
+    canvasManager.scene.add(hoverOrbitBuf);
 
-    var fs = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fs, shaderLoader.getShaderCode('path-fragment.glsl'));
-    gl.compileShader(fs);
-
-    pathShader = gl.createProgram();
-    gl.attachShader(pathShader, vs);
-    gl.attachShader(pathShader, fs);
-    gl.linkProgram(pathShader);
-
-    pathShader.aPos = gl.getAttribLocation(pathShader, 'aPos');
-    pathShader.uMvMatrix = gl.getUniformLocation(pathShader, 'uMvMatrix');
-    pathShader.uCamMatrix = gl.getUniformLocation(pathShader, 'uCamMatrix');
-    pathShader.uPMatrix = gl.getUniformLocation(pathShader, 'uPMatrix');
-    pathShader.uColor = gl.getUniformLocation(pathShader, 'uColor');
-
-    selectOrbitBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, selectOrbitBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array((NUM_SEGS + 1) * 3), gl.STATIC_DRAW);
-
-    hoverOrbitBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, hoverOrbitBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array((NUM_SEGS + 1) * 3), gl.STATIC_DRAW);
-
+    glBuffers = new THREE.Group();
     for (var i = 0; i < satSet.missileSats; i++) {
-      glBuffers.push(allocateBuffer());
+      glBuffers.add(allocateBuffer());
+      glBuffers.children[i].visible = false;
     }
+    canvasManager.scene.add(glBuffers);
+
+
     orbitWorker.postMessage({
       isInit: true,
       satData: satSet.satDataString,
@@ -122,47 +105,22 @@
   };
 
   orbitWorker.onmessage = function (m) {
-    var satId = m.data.satId;
-    var pointsOut = new Float32Array(m.data.pointsOut);
-    gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers[satId]);
-    gl.bufferData(gl.ARRAY_BUFFER, pointsOut, gl.DYNAMIC_DRAW);
-    inProgress[satId] = false;
+    glBuffers.children[m.data.satId].geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array(m.data.pointsOut), 3 ));
+    glBuffers.children[m.data.satId].geometry.attributes.position.needsUpdate = true;
+    glBuffers.children[m.data.satId].visible = true;
+    inProgress[m.data.satId] = false;
   };
-
-  /* orbitDisplay.setOrbit = function (satId) {
-    var sat = satSet.getSat(satId);
-    mat4.identity(orbitMvMat);
-    //apply steps in reverse order because matrix multiplication
-    // (last multiplied in is first applied to vertex)
-
-    //step 5. rotate to RAAN
-    mat4.rotateZ(orbitMvMat, orbitMvMat, sat.raan + Math.PI/2);
-    //step 4. incline the plane
-    mat4.rotateY(orbitMvMat, orbitMvMat, -sat.inclination);
-    //step 3. rotate to argument of periapsis
-    mat4.rotateZ(orbitMvMat, orbitMvMat, sat.argPe - Math.PI/2);
-    //step 2. put earth at the focus
-    mat4.translate(orbitMvMat, orbitMvMat, [sat.semiMajorAxis - sat.apogee - RADIUS_OF_EARTH, 0, 0]);
-    //step 1. stretch to ellipse
-    mat4.scale(orbitMvMat, orbitMvMat, [sat.semiMajorAxis, sat.semiMinorAxis, 0]);
-
-  };
-
-  orbitDisplay.clearOrbit = function () {
-    mat4.identity(orbitMvMat);
-  } */
 
   orbitDisplay.setSelectOrbit = function (satId) {
-   // var start = performance.now();
     currentSelectId = satId;
     orbitDisplay.updateOrbitBuffer(satId);
-   // console.log('setOrbit(): ' + (performance.now() - start) + ' ms');
   };
 
   orbitDisplay.clearSelectOrbit = function () {
     currentSelectId = -1;
-    gl.bindBuffer(gl.ARRAY_BUFFER, selectOrbitBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array((NUM_SEGS + 1) * 3), gl.DYNAMIC_DRAW);
+    selectOrbitBuf.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
+    selectOrbitBuf.geometry.attributes.position.needsUpdate = true;
+    selectOrbitBuf.visible = false;
   };
 
   orbitDisplay.addInViewOrbit = function (satId) {
@@ -199,69 +157,22 @@
   orbitDisplay.clearHoverOrbit = function (satId) {
     if (currentHoverId === -1) return;
     currentHoverId = -1;
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, hoverOrbitBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array((NUM_SEGS + 1) * 3), gl.DYNAMIC_DRAW);
+    hoverOrbitBuf.geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
+    hoverOrbitBuf.visible = false;
+    hoverOrbitBuf.geometry.attributes.position.needsUpdate = true;
   };
 
   orbitDisplay.draw = function (pMatrix, camMatrix) { // lol what do I do here
     if (!initialized) return;
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.useProgram(pathShader);
 
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.enable(gl.BLEND);
-   // gl.depthMask(false);
-
-    gl.uniformMatrix4fv(pathShader.uMvMatrix, false, orbitMvMat);
-    gl.uniformMatrix4fv(pathShader.uCamMatrix, false, camMatrix);
-    gl.uniformMatrix4fv(pathShader.uPMatrix, false, pMatrix);
-
-    if (currentSelectId !== -1 && !satSet.getSatExtraOnly(currentSelectId).static) {
-      gl.uniform4fv(pathShader.uColor, selectColor);
-      gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers[currentSelectId]);
-      gl.vertexAttribPointer(pathShader.aPos, 3, gl.FLOAT, false, 0, 0);
-      gl.drawArrays(gl.LINE_STRIP, 0, NUM_SEGS + 1);
-    }
-
-    if (currentHoverId !== -1 && currentHoverId !== currentSelectId && !satSet.getSatExtraOnly(currentHoverId).static) { // avoid z-fighting
-      gl.uniform4fv(pathShader.uColor, hoverColor);
-      gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers[currentHoverId]);
-      gl.vertexAttribPointer(pathShader.aPos, 3, gl.FLOAT, false, 0, 0);
-      gl.drawArrays(gl.LINE_STRIP, 0, NUM_SEGS + 1);
-    }
-
-    if (currentInView.length >= 1) { // There might be some z-fighting
-      gl.uniform4fv(pathShader.uColor, inViewColor);
-      currentInView.forEach(function (id) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers[id]);
-        gl.vertexAttribPointer(pathShader.aPos, 3, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.LINE_STRIP, 0, NUM_SEGS + 1);
-      });
-    }
-
-    if (groups.selectedGroup !== null && !settingsManager.isGroupOverlayDisabled) {
-      gl.uniform4fv(pathShader.uColor, groupColor);
-      groups.selectedGroup.forEach(function (id) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers[id]);
-        gl.vertexAttribPointer(pathShader.aPos, 3, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.LINE_STRIP, 0, NUM_SEGS + 1);
-      });
-    }
-
-    //  gl.depthMask(true);
-    gl.disable(gl.BLEND);
 
     // Done drawing
     return true;
   };
 
   function allocateBuffer () {
-    var buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array((NUM_SEGS + 1) * 3), gl.STATIC_DRAW);
-    return buf;
+    return new THREE.Line(new THREE.BufferGeometry().setAttribute( 'position', new THREE.Float32BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 )), orbitDisplay.material);
   }
 
   orbitDisplay.getPathShader = function () {

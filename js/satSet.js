@@ -36,6 +36,7 @@ var starBuf;
 // Removed to reduce garbage collection
 var buffers;
 var pickColorBuf;
+var pickColorData = [];
 var pickableBuf;
 
 var uFOVi;  // Update FOV function iteration i variable
@@ -574,11 +575,8 @@ var hoveringSat = -1;
       // multThreadCruncher8.postMessage({type: 'init', data: satSet.satDataString});
 
       // populate GPU mem buffers, now that we know how many sats there are
-      satPosBuf = gl.createBuffer();
       satPos = new Float32Array(satData.length * 3);
 
-      var pickColorData = [];
-      pickColorBuf = gl.createBuffer();
       for (var i = 0; i < satData.length; i++) {
         var byteR = (i + 1) & 0xff;
         var byteG = ((i + 1) & 0xff00) >> 8;
@@ -587,13 +585,10 @@ var hoveringSat = -1;
         pickColorData.push(byteG / 255.0);
         pickColorData.push(byteB / 255.0);
       }
-      gl.bindBuffer(gl.ARRAY_BUFFER, pickColorBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pickColorData), gl.STATIC_DRAW);
 
-      starBuf = gl.createBuffer();
       starBufData = satSet.setupStarData(satData);
-      gl.bindBuffer(gl.ARRAY_BUFFER, starBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(starBufData), gl.STATIC_DRAW);
+
+      canvasManager.start();
 
       satSet.numSats = satData.length;
       satSet.setColorScheme(ColorScheme.default, true);
@@ -1381,11 +1376,11 @@ var hoveringSat = -1;
 
   satSet.setHover = (i) => {
     if (i === hoveringSat) return;
-    gl.bindBuffer(gl.ARRAY_BUFFER, satColorBuf);
     // If Old Select Sat Picked Color it Correct Color
-    if (hoveringSat !== -1) {
+    if (hoveringSat !== -1 && hoveringSat !== selectedSat) {
       try {
-        gl.bufferSubData(gl.ARRAY_BUFFER, hoveringSat * 4 * 4, new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(hoveringSat)).color));
+        // bufferSubData(gl.ARRAY_BUFFER, hoveringSat * 4 * 4, new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(hoveringSat)).color));
+        canvasManager.objects.sats.geometry.attributes.color.array.set(new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(hoveringSat)).color), hoveringSat * 4);
       } catch (e) {
         console.log(hoveringSat);
         console.log(satSet.getSat(hoveringSat));
@@ -1394,9 +1389,15 @@ var hoveringSat = -1;
     }
     // If New Select Sat Picked Color it
     if (i !== -1) {
-      gl.bufferSubData(gl.ARRAY_BUFFER, i * 4 * 4, new Float32Array(settingsManager.hoverColor));
+      // gl.bufferSubData(gl.ARRAY_BUFFER, i * 4 * 4, new Float32Array(settingsManager.hoverColor));
+      try {
+        canvasManager.objects.sats.geometry.attributes.color.array.set(new Float32Array(settingsManager.hoverColor), i * 4);
+      } catch (e) {
+        console.log(`i: ${i} - arrayLen: ${canvasManager.objects.sats.geometry.attributes.color.array.length}`);
+      }
     }
       hoveringSat = i;
+      canvasManager.objects.sats.geometry.attributes.color.needsUpdate = true;
   };
 
   satSet.selectSat = (i) => {
@@ -1407,17 +1408,20 @@ var hoveringSat = -1;
       satelliteSelected: [i]
     });
     if (settingsManager.isMobileModeEnabled) mobile.searchToggle(false);
-    gl.bindBuffer(gl.ARRAY_BUFFER, satColorBuf);
     // If Old Select Sat Picked Color it Correct Color
     if (selectedSat !== -1) {
-      gl.bufferSubData(gl.ARRAY_BUFFER, selectedSat * 4 * 4, new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(selectedSat)).color));
+      // gl.bufferSubData(gl.ARRAY_BUFFER, selectedSat * 4 * 4, new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(selectedSat)).color));
+      canvasManager.objects.sats.geometry.attributes.color.array.set(new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(selectedSat)).color), selectedSat * 4);
+      console.log(1);
     }
     // If New Select Sat Picked Color it
     if (i !== -1) {
       isSatView = true;
-      gl.bufferSubData(gl.ARRAY_BUFFER, i * 4 * 4, new Float32Array(settingsManager.selectedColor));
+      // gl.bufferSubData(gl.ARRAY_BUFFER, i * 4 * 4, new Float32Array(settingsManager.selectedColor));
+      canvasManager.objects.sats.geometry.attributes.color.array.set(new Float32Array(settingsManager.selectedColor), i * 4);
     }
     selectedSat = i;
+    canvasManager.objects.sats.geometry.attributes.color.needsUpdate = true;
 
     if (objectManager.isSensorManagerLoaded && sensorManager.checkSensorSelected()) {
       $('#menu-lookangles').removeClass('bmenu-item-disabled');
@@ -1434,6 +1438,7 @@ var hoveringSat = -1;
   satSet.onCruncherReady = () => {
     db.log('satSet.onCruncherReady',true);
     canvasManager.start();
+    orbitDisplay.init();
     satSet.queryStr = window.location.search.substring(1);
     // searchBox.init(satData);
     satSet.satDataString = null; // Clears stringified json file and clears 7MB of memory.

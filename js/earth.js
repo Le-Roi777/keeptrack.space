@@ -63,7 +63,7 @@ ATMOSPHERE_DIST_MIN = 200;
   function onImageLoaded () {
     if (texLoaded && nightLoaded) {
       loaded = true;
-      earth.loaded = true;
+      // earth.loaded = true;
     }
   }
 
@@ -243,7 +243,7 @@ ATMOSPHERE_DIST_MIN = 200;
   };
 
   earth.draw = function (pMatrix, camMatrix) {
-    if (!loaded) return;    
+    if (!loaded) return;
 
     // Done Drawing
     return true;

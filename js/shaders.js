@@ -135,7 +135,7 @@
         float r = 0.43 - min(abs(length(ptCoord)), 1.0);
         float alpha = pow(2.0 * r + 0.1, 3.0);
         alpha = min(alpha, 1.0);
-        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+        gl_FragColor = vec4(vColor.rgb,1.0 * alpha);
       }
     `
     }, {
@@ -160,6 +160,25 @@
           gl_PointSize = min(max(pow(40000.0 \/ position.z, 2.1), minSize * aStar), maxSize) * 1.0;
           gl_Position = position;
           vColor = aColor;
+        }
+      `
+    }, {
+      'name': 'dot-vertex-3.glsl',
+      'code': `
+        attribute vec4 color;
+        attribute float isStar;
+
+        uniform float minSize;
+        uniform float maxSize;
+
+        varying vec4 vColor;
+
+        void main(void) {
+          vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * modelViewPosition;
+
+          gl_PointSize = min(max(pow(15000.0 \/ gl_Position.z, 2.1), minSize * isStar), maxSize) * 1.0;
+          vColor = color;
         }
       `
     }, {

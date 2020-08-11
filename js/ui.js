@@ -172,7 +172,7 @@ var isAnalysisMenuOpen = false;
         if (!resizing) {
           window.setTimeout(function () {
             resizing = false;
-            webGlInit();
+            canvasManager.resizeCanvas();
           }, 500);
         }
         resizing = true;
@@ -338,12 +338,16 @@ var isAnalysisMenuOpen = false;
       });
       canvasDOM2.on("mousedown", function (evt) {
         if (speedModifier === 1) {
-          settingsManager.cameraMovementSpeed = 0.003;
+          settingsManager.cameraMovementSpeed = 0.002;
           settingsManager.cameraMovementSpeedMin = 0.005;
         }
 
         dragPoint = getEarthScreenPoint(mouseX, mouseY);
-        latLon = satellite.eci2ll(dragPoint[0], dragPoint[1], dragPoint[2]);
+        try {
+          latLon = satellite.eci2ll(dragPoint.point.x, dragPoint.point.y, dragPoint.point.z);
+        } catch (e) {
+          latLon = null;
+        }
         screenDragPoint = [mouseX, mouseY];
         dragStartPitch = camPitch;
         dragStartYaw = camYaw;

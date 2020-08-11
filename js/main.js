@@ -123,26 +123,6 @@ var rotateTheEarth = true; // Set to False to disable initial rotation
 
 var drawLoopCallback;
 (function () {
-  var time, drawNow, dt;
-
-  // updateHover
-  var updateHoverSatId, updateHoverSatPos;
-
-  // _unProject variables
-  var glScreenX, glScreenY, screenVec, comboPMat, invMat, worldVec, gCPr, gCPz,
-      gCPrYaw, gCPx, gCPy, fpsTimeNow, fpsElapsed, satData, dragTarget;
-
-  // drawLoop camera variables
-  var xDif, yDif, yawTarget, pitchTarget, dragPointR, dragTargetR, dragPointLon,
-      dragTargetLon, dragPointLat, dragTargetLat, pitchDif, yawDif;
-  var rotateTheEarthSpeed = 0.000075; // Adjust to change camera speed when rotating around earth
-  var isHoverBoxVisible = false;
-  var isShowDistance = true;
-
-  // getEarthScreenPoint
-  var rayOrigin, ptThru, rayDir, toCenterVec, dParallel, longDir, dPerp, dSubSurf,
-      dSurf, ptSurf;
-
   // Code Once index.htm is loaded
   $(document).ready(function () {
     // Set Default TLE
@@ -151,17 +131,14 @@ var drawLoopCallback;
     }
     webGlInit();
     atmosphere.init();
-    // sun.init();
-    // moon.init();
     earth.init();
     ColorScheme.init();
     $('#loader-text').text('Drawing Dots in Space...');
     satSet.init(function satSetInitCallBack (satData) {
-      orbitDisplay.init();
       groups.init();
       searchBox.init(satData);
       (function _checkIfEarthFinished () {
-        if (earth.loaded) return;
+        if (canvasManager.isReady) return;
         $('#loader-text').text('Coloring Inside the Lines...');
         setTimeout(function () {
           _checkIfEarthFinished();
@@ -169,7 +146,7 @@ var drawLoopCallback;
       })();
       let isFinalLoadingComplete = false;
       (function _finalLoadingSequence () {
-        if (!isFinalLoadingComplete && !earth.loaded) {
+        if (!isFinalLoadingComplete && !canvasManager.isReady) {
           setTimeout(function () {
             _finalLoadingSequence();
           }, 250);
@@ -340,172 +317,19 @@ var drawLoopCallback;
         }
       })();
     });
-    drawLoop(); // kick off the animationFrame()s
   });
 
   var drawLoopCount = 0;
 
   function drawLoop () {
-    // NOTE drawLoop has 7kb memory leak -- No Impact
-    requestAnimationFrame(drawLoop);
-    drawNow = Date.now();
-    dt = drawNow - (time || drawNow);
-    if (typeof drawLoopCount != 'undefined') {
-      drawLoopCount++;
-      if (drawLoopCount > 100) {
-        drawLoopCount = null;
-        return;
-      }
-      if (drawLoopCount > 50) {
-        if (dt > 500 && !settingsManager.isSlowCPUModeEnabled) {
-          // Method of determining if computer is slow
-          // selectSat(-1);
-          // M.toast({html: `Computer is slow!</br>Forcing Mobile Mode`});
-          // settingsManager.isMobileModeEnabled = true;
-          // settingsManager.fieldOfView = settingsManager.fieldOfViewMax;
-          // webGlInit();
-          // settingsManager.isDisableSatHoverBox = true;
-          // enableSlowCPUMode();
-        }
-      }
-    }
-    if (dt > 20) {
-      updateHoverDelayLimit = 10;
-    } else if (dt > 50) {
-      updateHoverDelayLimit = 15;
-    } else {
-      if (updateHoverDelayLimit > 1)
-        --updateHoverDelayLimit;
-    }
+    return;
 
-    time = drawNow;
-    timeManager.now = drawNow;
 
-    if ((isDragging && !settingsManager.isMobileModeEnabled) ||
-         isDragging && settingsManager.isMobileModeEnabled && (mouseX !== 0 || mouseY !== 0)) {
-      dragTarget = getEarthScreenPoint(mouseX, mouseY);
-      if (isNaN(dragTarget[0]) || isNaN(dragTarget[1]) || isNaN(dragTarget[2]) ||
-      isNaN(dragPoint[0]) || isNaN(dragPoint[1]) || isNaN(dragPoint[2]) ||
-      cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY ||
-      settingsManager.isMobileModeEnabled) { // random screen drag
-        xDif = screenDragPoint[0] - mouseX;
-        yDif = screenDragPoint[1] - mouseY;
-        yawTarget = dragStartYaw + xDif * settingsManager.cameraMovementSpeed;
-        pitchTarget = dragStartPitch + yDif * -settingsManager.cameraMovementSpeed;
-        camPitchSpeed = _normalizeAngle(camPitch - pitchTarget) * -settingsManager.cameraMovementSpeed;
-        camYawSpeed = _normalizeAngle(camYaw - yawTarget) * -settingsManager.cameraMovementSpeed;
-      } else {  // earth surface point drag
-        dragPointR = Math.sqrt(dragPoint[0] * dragPoint[0] + dragPoint[1] * dragPoint[1]);
-        dragTargetR = Math.sqrt(dragTarget[0] * dragTarget[0] + dragTarget[1] * dragTarget[1]);
-
-        dragPointLon = Math.atan2(dragPoint[1], dragPoint[0]);
-        dragTargetLon = Math.atan2(dragTarget[1], dragTarget[0]);
-
-        dragPointLat = Math.atan2(dragPoint[2], dragPointR);
-        dragTargetLat = Math.atan2(dragTarget[2], dragTargetR);
-
-        pitchDif = dragPointLat - dragTargetLat;
-        yawDif = _normalizeAngle(dragPointLon - dragTargetLon);
-        camPitchSpeed = pitchDif * settingsManager.cameraMovementSpeed;
-        camYawSpeed = yawDif * settingsManager.cameraMovementSpeed;
-      }
-      camSnapMode = false;
-    } else {
-      // DESKTOP ONLY
-      if (!settingsManager.isMobileModeEnabled) {
-        camPitchSpeed -= (camPitchSpeed * dt * settingsManager.cameraMovementSpeed); // decay speeds when globe is "thrown"
-        camYawSpeed -= (camYawSpeed * dt * settingsManager.cameraMovementSpeed);
-      } else if (settingsManager.isMobileModeEnabled) { // MOBILE
-        camPitchSpeed -= (camPitchSpeed * dt * settingsManager.cameraMovementSpeed * 5); // decay speeds when globe is "thrown"
-        camYawSpeed -= (camYawSpeed * dt * settingsManager.cameraMovementSpeed  * 5);
-      }
-    }
-
-    camRotateSpeed -= (camRotateSpeed * dt * settingsManager.cameraMovementSpeed);
-
-    if (cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY) {
-
-      fpsPitch -= 20 * camPitchSpeed * dt;
-      fpsYaw -= 20 * camYawSpeed * dt;
-      fpsRotate -= 20 * camRotateSpeed * dt;
-
-      // Prevent Over Rotation
-      if (fpsPitch > 90) fpsPitch = 90;
-      if (fpsPitch < -90) fpsPitch = -90;
-      // ASTRONOMY 180 FOV Bubble Looking out from Sensor
-      if (cameraType.current=== cameraType.ASTRONOMY) {
-        if (fpsRotate > 90) fpsRotate = 90;
-        if (fpsRotate < -90) fpsRotate = -90;
-      } else {
-        if (fpsRotate > 360) fpsRotate -= 360;
-        if (fpsRotate < 0) fpsRotate += 360;
-      }
-      if (fpsYaw > 360) fpsYaw -= 360;
-      if (fpsYaw < 0) fpsYaw += 360;
-    } else {
-      camPitch += camPitchSpeed * dt;
-      camYaw += camYawSpeed * dt;
-      fpsRotate += camRotateSpeed * dt;
-    }
-
-    if (rotateTheEarth) { camYaw -= rotateTheEarthSpeed * dt; }
-
-    // Zoom Changing
-    if (zoomLevel !== zoomTarget) {
-      if (zoomLevel > settingsManager.satShader.largeObjectMaxZoom) {
-        settingsManager.satShader.maxSize = settingsManager.satShader.maxAllowedSize * 2;
-      } else if (zoomLevel < settingsManager.satShader.largeObjectMinZoom) {
-        settingsManager.satShader.maxSize = settingsManager.satShader.maxAllowedSize / 2;
-      } else {
-        settingsManager.satShader.maxSize = settingsManager.satShader.maxAllowedSize;
-      }
-      atmosphere.resize();
-    }
-
-    if (camSnapMode) {
-      camPitch += (camPitchTarget - camPitch) * 0.003 * dt;
-
-      let yawErr = _normalizeAngle(camYawTarget - camYaw);
-      camYaw += yawErr * 0.003 * dt;
-
-      zoomLevel = zoomLevel + (zoomTarget - zoomLevel) * dt * 0.0025;
-    } else {
-      if (isZoomIn) {
-        zoomLevel -= zoomLevel * dt / 100 * Math.abs(zoomTarget - zoomLevel);
-      } else {
-        zoomLevel += zoomLevel * dt / 100 * Math.abs(zoomTarget - zoomLevel);
-      }
-      if ((zoomLevel >= zoomTarget && !isZoomIn) ||
-          (zoomLevel <= zoomTarget && isZoomIn)) {
-        zoomLevel = zoomTarget;
-      }
-    }
-
-    if (camPitch > TAU / 4) camPitch = TAU / 4;
-    if (camPitch < -TAU / 4) camPitch = -TAU / 4;
-    camYaw = _normalizeAngle(camYaw);
-    if (selectedSat !== -1) {
-      let sat = satSet.getSat(selectedSat);
-      if (!sat.static) {
-        _camSnapToSat(sat);
-      }
-      if (sat.static && cameraType.current=== cameraType.PLANETARIUM) {
-        // _camSnapToSat(selectedSat);
-      }
-      // var satposition = [sat.position.x, sat.position.y, sat.position.z];
-      // debugLine.set(satposition, [0, 0, 0]);
-    }
-
-    if (typeof missileManager != 'undefined' && missileManager.missileArray.length > 0) {
-      for (var i = 0; i < missileManager.missileArray.length; i++) {
-        orbitDisplay.updateOrbitBuffer(missileManager.missileArray[i].id);
-      }
-    }
 
     _drawScene();
     drawLines();
-    _updateHover();
-    _onDrawLoopComplete(drawLoopCallback);
+
+
     if (settingsManager.isDemoModeOn) _demoMode();
 
     // Hide satMiniBoxes When Not in Use
@@ -537,7 +361,7 @@ var drawLoopCallback;
           copyrightStr = '';
         }
 
-        link.href = _watermarkedDataURL(canvasDOM[0],copyrightStr);
+        link.href = _watermarkedDataURL(canvasDOM2[0],copyrightStr);
         settingsManager.screenshotMode = false;
         settingsManager.queuedScreenshot = false;
         setTimeout(function () {
@@ -549,510 +373,10 @@ var drawLoopCallback;
     }
   }
 
-  function _watermarkedDataURL(canvas,text){
-    var tempCanvas=document.createElement('canvas');
-    var tempCtx=tempCanvas.getContext('2d');
-    var cw,ch;
-    cw=tempCanvas.width=canvas.width;
-    ch=tempCanvas.height=canvas.height;
-    tempCtx.drawImage(canvas,0,0);
-    tempCtx.font = "24px nasalization";
-    var textWidth = tempCtx.measureText(text).width;
-    tempCtx.globalAlpha = 1.0;
-    tempCtx.fillStyle ='white';
-    tempCtx.fillText(text,cw-textWidth-30,ch-30);
-    // tempCtx.fillStyle ='black';
-    // tempCtx.fillText(text,cw-textWidth-10+2,ch-20+2);
-    // just testing by adding tempCanvas to document
-    document.body.appendChild(tempCanvas);
-    let image = tempCanvas.toDataURL();
-    tempCanvas.parentNode.removeChild(tempCanvas);
-    return(image);
-  }
-  function _camSnapToSat (sat) {
-    /* this function runs every frame that a satellite is selected.
-    However, the user might have broken out of the zoom snap or angle snap.
-    If so, don't change those targets. */
 
-    if (camAngleSnappedOnSat) {
-      var pos = sat.position;
-      var r = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
-      var yaw = Math.atan2(pos.y, pos.x) + TAU / 4;
-      var pitch = Math.atan2(pos.z, r);
-      if (!pitch) {
-        console.warn('Pitch Calculation Error');
-        pitch = 0;
-        camZoomSnappedOnSat = false;
-        camAngleSnappedOnSat = false;
-      }
-      if (!yaw) {
-        console.warn('Yaw Calculation Error');
-        yaw = 0;
-        camZoomSnappedOnSat = false;
-        camAngleSnappedOnSat = false;
-      }
-      if (cameraType.current=== cameraType.PLANETARIUM) {
-        // camSnap(-pitch, -yaw);
-      } else {
-        camSnap(pitch, yaw);
-      }
-    }
 
-    if (camZoomSnappedOnSat) {
-      var altitude;
-      var camDistTarget;
-      if (!sat.missile && !sat.static && sat.active) { // if this is a satellite not a missile
-        altitude = sat.getAltitude();
-      } if (sat.missile) {
-        altitude = sat.maxAlt + 1000;             // if it is a missile use its altitude
-        orbitDisplay.setSelectOrbit(sat.satId);
-      }
-      if (altitude) {
-        camDistTarget = altitude + RADIUS_OF_EARTH + settingsManager.camDistBuffer;
-      } else {
-        camDistTarget = RADIUS_OF_EARTH + settingsManager.camDistBuffer;  // Stay out of the center of the earth. You will get stuck there.
-        console.warn('Zoom Calculation Error: ' + altitude + ' -- ' + camDistTarget);
-        camZoomSnappedOnSat = false;
-        camAngleSnappedOnSat = false;
-      }
-      if (Math.pow((camDistTarget - DIST_MIN) / (DIST_MAX - DIST_MIN), 1 / ZOOM_EXP) < zoomTarget) {
-        zoomTarget = Math.pow((camDistTarget - DIST_MIN) / (DIST_MAX - DIST_MIN), 1 / ZOOM_EXP);
-      }
-    }
 
-    if (cameraType.current=== cameraType.PLANETARIUM) {
-      zoomTarget = 0.01;
-    }
-  }
-  function _drawScene () {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, gl.pickFb);
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    if (cameraType.current=== cameraType.FPS || cameraType.current=== cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY) {
-      _fpsMovement();
-    }
-    camMatrix = _drawCamera();
-
-    gl.useProgram(gl.pickShaderProgram);
-    gl.uniformMatrix4fv(gl.pickShaderProgram.uPMatrix, false, pMatrix);
-    gl.uniformMatrix4fv(gl.pickShaderProgram.camMatrix, false, camMatrix);
-
-    // Why do we clear the color buffer twice?
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    // sun.draw(pMatrix, camMatrix);
-    // moon.draw(pMatrix, camMatrix);
-    // if (typeof debugLine != 'undefined') debugLine.draw();
-    // if (cameraType.current != cameraType.FPS) {
-    //   atmosphere.draw(pMatrix, camMatrix);
-    // }
-    // earth.draw(pMatrix, camMatrix);
-    // satSet.draw(pMatrix, camMatrix, drawNow);
-    // orbitDisplay.draw(pMatrix, camMatrix);
-
-    /* DEBUG - show the pickbuffer on a canvas */
-    // debugImageData.data = pickColorMap;
-    /* debugImageData.data.set(pickColorMap);
-    debugContext.putImageData(debugImageData, 0, 0); */
-
-  }
-  function _drawCamera () {
-      camMatrix = camMatrixEmpty;
-      mat4.identity(camMatrix);
-
-      /**
-      * For FPS style movement rotate the camera and then translate it
-      * for traditional view, move the camera and then rotate it
-      */
-
-     if (isNaN(camPitch) || isNaN(camYaw) || isNaN(camPitchTarget) || isNaN(camYawTarget) || isNaN(zoomLevel) || isNaN(zoomTarget)) {
-       try {
-         console.group('Camera Math Error');
-         console.log(`camPitch: ${camPitch}`);
-         console.log(`camYaw: ${camYaw}`);
-         console.log(`camPitchTarget: ${camPitchTarget}`);
-         console.log(`camYawTarget: ${camYawTarget}`);
-         console.log(`zoomLevel: ${zoomLevel}`);
-         console.log(`zoomTarget: ${zoomTarget}`);
-         console.log(`settingsManager.cameraMovementSpeed: ${settingsManager.cameraMovementSpeed}`);
-         console.groupEnd();
-       } catch (e) {
-         console.warn('Camera Math Error');
-       }
-       camPitch = 0.5;
-       camYaw = 0.5;
-       zoomLevel  = 0.5;
-       camPitchTarget = 0;
-       camYawTarget = 0;
-       zoomTarget = 0.5;
-     }
-
-      switch (cameraType.current) {
-        case cameraType.DEFAULT: // pivot around the earth with earth in the center
-          mat4.translate(camMatrix, camMatrix, [0, _getCamDist(), 0]);
-          mat4.rotateX(camMatrix, camMatrix, camPitch);
-          mat4.rotateZ(camMatrix, camMatrix, -camYaw);
-          break;
-        case cameraType.OFFSET: // pivot around the earth with earth offset to the bottom right
-          mat4.translate(camMatrix, camMatrix, [15000, _getCamDist(), -6000]);
-          mat4.rotateX(camMatrix, camMatrix, camPitch);
-          mat4.rotateZ(camMatrix, camMatrix, -camYaw);
-          break;
-        case cameraType.FPS: // FPS style movement
-          mat4.rotate(camMatrix, camMatrix, -fpsPitch * DEG2RAD, [1, 0, 0]);
-          mat4.rotate(camMatrix, camMatrix, fpsYaw * DEG2RAD, [0, 0, 1]);
-          mat4.translate(camMatrix, camMatrix, [fpsXPos, fpsYPos, -fpsZPos]);
-          break;
-        case cameraType.PLANETARIUM: // pivot around the earth looking away from the earth
-          {
-            let satPos = _calculateSensorPos({});
-
-            // Pitch is the opposite of the angle to the latitude
-            // Yaw is 90 degrees to the left of the angle to the longitude
-            pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
-            yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
-            mat4.rotate(camMatrix, camMatrix, pitchRotate, [1, 0, 0]);
-            mat4.rotate(camMatrix, camMatrix, yawRotate, [0, 0, 1]);
-
-            mat4.translate(camMatrix, camMatrix, [-satPos.x, -satPos.y, -satPos.z]);
-
-            _showOrbitsAbove();
-
-            break;
-          }
-        case cameraType.SATELLITE:
-          {
-            // yawRotate = ((-90 - sensorManager.currentSensor.long) * DEG2RAD);
-            if (selectedSat !== -1) lastSelectedSat = selectedSat;
-            let sat = satSet.getSat(lastSelectedSat);
-            // mat4.rotate(camMatrix, camMatrix, sat.inclination * DEG2RAD, [0, 1, 0]);
-            mat4.rotate(camMatrix, camMatrix, -fpsPitch * DEG2RAD, [1, 0, 0]);
-            mat4.rotate(camMatrix, camMatrix, fpsYaw * DEG2RAD, [0, 0, 1]);
-            mat4.rotate(camMatrix, camMatrix, fpsRotate * DEG2RAD, [0, 1, 0]);
-
-            orbitDisplay.updateOrbitBuffer(lastSelectedSat);
-            let satPos = sat.position;
-            mat4.translate(camMatrix, camMatrix, [-satPos.x, -satPos.y, -satPos.z]);
-            break;
-          }
-        case cameraType.ASTRONOMY:
-          {
-            let satPos = _calculateSensorPos({});
-
-            // Pitch is the opposite of the angle to the latitude
-            // Yaw is 90 degrees to the left of the angle to the longitude
-            pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
-            yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
-
-            // TODO: Calculate elevation for cameraType.ASTRONOMY
-            // Idealy the astronomy view would feel more natural and tell you what
-            // az/el you are currently looking at.
-
-            // fpsEl = ((fpsPitch + 90) > 90) ? (-(fpsPitch) + 90) : (fpsPitch + 90);
-            // $('#el-text').html(' EL: ' + fpsEl.toFixed(2) + ' deg');
-
-            // yawRotate = ((-90 - sensorManager.currentSensor.long) * DEG2RAD);
-            let sensor = null;
-            if (typeof sensorManager.currentSensor.name == 'undefined') {
-              sensor = satSet.getIdFromSensorName(sensorManager.currentSensor.name);
-              if (sensor == null) return;
-            } else {
-              sensor = satSet.getSat(satSet.getIdFromSensorName(sensorManager.currentSensor.name));
-            }
-            // mat4.rotate(camMatrix, camMatrix, sat.inclination * DEG2RAD, [0, 1, 0]);
-            mat4.rotate(camMatrix, camMatrix, (pitchRotate + (-fpsPitch * DEG2RAD)), [1, 0, 0]);
-            mat4.rotate(camMatrix, camMatrix, (yawRotate + (fpsYaw * DEG2RAD)), [0, 0, 1]);
-            mat4.rotate(camMatrix, camMatrix, fpsRotate * DEG2RAD, [0, 1, 0]);
-
-            // orbitDisplay.updateOrbitBuffer(lastSelectedSat);
-            let sensorPos = sensor.position;
-            fpsXPos = sensorPos.x;
-            fpsYPos = sensorPos.y;
-            fpsZPos = sensorPos.z;
-            mat4.translate(camMatrix, camMatrix, [-sensorPos.x * 1.01, -sensorPos.y * 1.01, -sensorPos.z * 1.01]); // Scale to get away from Earth
-
-            _showOrbitsAbove(); // Clears Orbit
-            break;
-          }
-      }
-      return camMatrix;
-    }
-  function _calculateSensorPos (pos) {
-    var now = timeManager.propTime();
-    var j = jday(now.getUTCFullYear(),
-    now.getUTCMonth() + 1, // Note, this function requires months in range 1-12.
-    now.getUTCDate(),
-    now.getUTCHours(),
-    now.getUTCMinutes(),
-    now.getUTCSeconds());
-    j += now.getUTCMilliseconds() * 1.15741e-8; // days per millisecond
-    function jday (year, mon, day, hr, minute, sec) {
-      return (367.0 * year -
-        Math.floor((7 * (year + Math.floor((mon + 9) / 12.0))) * 0.25) +
-        Math.floor(275 * mon / 9.0) +
-        day + 1721013.5 +
-        ((sec / 60.0 + minute) / 60.0 + hr) / 24.0  //  ut in days
-      );
-    }
-    var gmst = satellite.gstime(j);
-
-    var cosLat = Math.cos(sensorManager.currentSensor.lat * DEG2RAD);
-    var sinLat = Math.sin(sensorManager.currentSensor.lat * DEG2RAD);
-    var cosLon = Math.cos((sensorManager.currentSensor.long * DEG2RAD) + gmst);
-    var sinLon = Math.sin((sensorManager.currentSensor.long * DEG2RAD) + gmst);
-
-    pos.x = (RADIUS_OF_EARTH + PLANETARIUM_DIST) * cosLat * cosLon;
-    pos.y = (RADIUS_OF_EARTH + PLANETARIUM_DIST) * cosLat * sinLon;
-    pos.z = (RADIUS_OF_EARTH + PLANETARIUM_DIST) * sinLat;
-    pos.gmst = gmst;
-    return pos;
-  }
-  function _fpsMovement () {
-    fpsTimeNow = Date.now();
-    if (fpsLastTime !== 0) {
-      fpsElapsed = fpsTimeNow - fpsLastTime;
-
-      if (isFPSForwardSpeedLock && fpsForwardSpeed < 0) {
-        fpsForwardSpeed = Math.max(fpsForwardSpeed + Math.min(fpsForwardSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.fpsForwardSpeed);
-      } else if (isFPSForwardSpeedLock && fpsForwardSpeed > 0) {
-        fpsForwardSpeed = Math.min(fpsForwardSpeed + Math.max(fpsForwardSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsForwardSpeed);
-      }
-
-      if (isFPSSideSpeedLock && fpsSideSpeed < 0) {
-        fpsSideSpeed = Math.max(fpsSideSpeed + Math.min(fpsSideSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.fpsSideSpeed);
-      } else if (isFPSSideSpeedLock && fpsSideSpeed < 0) {
-        fpsSideSpeed = Math.min(fpsSideSpeed + Math.max(fpsSideSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsSideSpeed);
-      }
-
-      if (isFPSVertSpeedLock && fpsVertSpeed < 0) {
-        fpsVertSpeed = Math.max(fpsVertSpeed + Math.min(fpsVertSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.fpsVertSpeed);
-      } else if (isFPSVertSpeedLock && fpsVertSpeed < 0) {
-        fpsVertSpeed = Math.min(fpsVertSpeed + Math.max(fpsVertSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsVertSpeed);
-      }
-
-      // console.log('Front: ' + fpsForwardSpeed + ' - ' + 'Side: ' + fpsSideSpeed + ' - ' + 'Vert: ' + fpsVertSpeed);
-
-      if (cameraType.FPS) {
-        if (fpsForwardSpeed !== 0) {
-          fpsXPos -= Math.sin(fpsYaw * DEG2RAD) * fpsForwardSpeed * fpsRun * fpsElapsed;
-          fpsYPos -= Math.cos(fpsYaw * DEG2RAD) * fpsForwardSpeed * fpsRun * fpsElapsed;
-          fpsZPos += Math.sin(fpsPitch * DEG2RAD) * fpsForwardSpeed * fpsRun * fpsElapsed;
-        }
-        if (fpsVertSpeed !== 0) {
-          fpsZPos -= fpsVertSpeed * fpsRun * fpsElapsed;
-        }
-        if (fpsSideSpeed !== 0) {
-          fpsXPos -= Math.cos(-fpsYaw * DEG2RAD) * fpsSideSpeed * fpsRun * fpsElapsed;
-          fpsYPos -= Math.sin(-fpsYaw * DEG2RAD) * fpsSideSpeed * fpsRun * fpsElapsed;
-        }
-      }
-
-      if (!isFPSForwardSpeedLock) fpsForwardSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
-      if (!isFPSSideSpeedLock) fpsSideSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
-      if (!isFPSVertSpeedLock) fpsVertSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
-
-      if (fpsForwardSpeed < 0.01 && fpsForwardSpeed > -0.01) fpsForwardSpeed = 0;
-      if (fpsSideSpeed < 0.01 && fpsSideSpeed > -0.01) fpsSideSpeed = 0;
-      if (fpsVertSpeed < 0.01 && fpsVertSpeed > -0.01) fpsVertSpeed = 0;
-
-      fpsPitch += fpsPitchRate * fpsElapsed;
-      fpsRotate += fpsRotateRate * fpsElapsed;
-      fpsYaw += fpsYawRate * fpsElapsed;
-
-      // console.log('Pitch: ' + fpsPitch + ' - ' + 'Rotate: ' + fpsRotate + ' - ' + 'Yaw: ' + fpsYaw);
-    }
-    fpsLastTime = fpsTimeNow;
-  }
-  var currentSearchSats;
-  function _updateHover () {
-    currentSearchSats = searchBox.getLastResultGroup();
-    if (searchBox.isHovering()) {
-      updateHoverSatId = searchBox.getHoverSat();
-      satSet.getScreenCoords(updateHoverSatId, pMatrix, camMatrix);
-      if (!_earthHitTest(satScreenPositionArray.x, satScreenPositionArray.y)) {
-        _hoverBoxOnSat(updateHoverSatId, satScreenPositionArray.x, satScreenPositionArray.y);
-      } else {
-        _hoverBoxOnSat(-1, 0, 0);
-      }
-    } else {
-      if (!isMouseMoving || isDragging || settingsManager.isMobileModeEnabled) { return; }
-
-      // gl.readPixels in getSatIdFromCoord creates a lot of jank
-      // Earlier in the loop we decided how much to throttle updateHover
-      // if we skip it this loop, we want to still drawl the last thing
-      // it was looking at
-
-      if (++updateHoverDelay >= updateHoverDelayLimit) {
-        updateHoverDelay = 0;
-        mouseSat = getSatIdFromCoord(mouseX, mouseY);
-      }
-
-      if (mouseSat !== -1) {
-        orbitDisplay.setHoverOrbit(mouseSat);
-      } else {
-        orbitDisplay.clearHoverOrbit();
-      }
-
-      satSet.setHover(mouseSat);
-      _hoverBoxOnSat(mouseSat, mouseX, mouseY);
-    }
-    function _earthHitTest (x, y) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, gl.pickFb);
-      gl.readPixels(x, gl.drawingBufferHeight - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pickColorBuf);
-
-      return (pickColorBuf[0] === 0 &&
-        pickColorBuf[1] === 0 &&
-        pickColorBuf[2] === 0);
-    }
-  }
-  var satLabelModeLastTime = 0;
-  var isSatMiniBoxInUse = false;
-  var labelCount;
-  var hoverBoxOnSatMiniElements = [];
-  var satHoverMiniDOM;
-  function _showOrbitsAbove () {
-
-    if ((!settingsManager.isSatLabelModeOn || cameraType.current !== cameraType.PLANETARIUM)) {
-      if (isSatMiniBoxInUse) {
-        $('#sat-minibox').html('');
-      }
-      isSatMiniBoxInUse = false;
-      return;
-    }
-
-    if (!sensorManager.checkSensorSelected()) return;
-    if (drawNow - satLabelModeLastTime < settingsManager.satLabelInterval) return;
-
-    orbitDisplay.clearInViewOrbit();
-
-    var sat;
-    labelCount = 0;
-    isHoverBoxVisible = true;
-
-    hoverBoxOnSatMiniElements = document.getElementById('sat-minibox');
-    hoverBoxOnSatMiniElements.innerHTML = '';
-    for (var i = 0; i < (satSet.orbitalSats) && labelCount < settingsManager.maxLabels; i++) {
-      sat = satSet.getSatPosOnly(i);
-
-      if (sat.static) continue;
-      if (sat.missile) continue;
-      if (sat.OT === 1 && ColorScheme.objectTypeFlags.payload === false) continue;
-      if (sat.OT === 2 && ColorScheme.objectTypeFlags.rocketBody === false) continue;
-      if (sat.OT === 3 && ColorScheme.objectTypeFlags.debris === false) continue;
-      if (sat.inview && ColorScheme.objectTypeFlags.inFOV === false) continue;
-
-      satSet.getScreenCoords(i, pMatrix, camMatrix, sat.position);
-      if (satScreenPositionArray.error) continue;
-      if (typeof satScreenPositionArray.x == 'undefined' || typeof satScreenPositionArray.y == 'undefined') continue;
-      if (satScreenPositionArray.x > window.innerWidth || satScreenPositionArray.y > window.innerHeight) continue;
-
-      // Draw Orbits
-      orbitDisplay.addInViewOrbit(i);
-
-      // Draw Sat Labels
-      // if (settingsManager.isDisableSatHoverBox) continue;
-      satHoverMiniDOM = document.createElement("div");
-      satHoverMiniDOM.id = 'sat-minibox-' + i;
-      satHoverMiniDOM.textContent = sat.SCC_NUM;
-      satHoverMiniDOM.setAttribute(
-        'style',
-        "display: block; position: absolute; left: " + satScreenPositionArray.x + 10 + "px; top: " + satScreenPositionArray.y + "px;"
-      );
-      hoverBoxOnSatMiniElements.appendChild(satHoverMiniDOM);
-      labelCount++;
-    }
-    isSatMiniBoxInUse = true;
-    satLabelModeLastTime = drawNow;
-  }
-  function _hoverBoxOnSat (satId, satX, satY) {
-    if (cameraType.current === cameraType.PLANETARIUM && !settingsManager.isDemoModeOn) {
-      satHoverBoxDOM.css({display: 'none'});
-      if (satId === -1) {
-        canvasDOM.css({cursor: 'default'});
-      } else {
-        canvasDOM.css({cursor: 'pointer'});
-      }
-      return;
-    }
-    if (satId === -1) {
-      if (!isHoverBoxVisible || settingsManager.isDisableSatHoverBox) return;
-      if (objectManager.isStarManagerLoaded) {
-        if (starManager.isConstellationVisible === true && !starManager.isAllConstellationVisible) starManager.clearConstellations();
-      }
-      // satHoverBoxDOM.html('(none)');
-      satHoverBoxDOM.css({display: 'none'});
-      canvasDOM.css({cursor: 'default'});
-      isHoverBoxVisible = false;
-    } else if (!isDragging && !settingsManager.isDisableSatHoverBox) {
-      var sat = satSet.getSatExtraOnly(satId);
-      var selectedSatData = satSet.getSatExtraOnly(selectedSat);
-      isHoverBoxVisible = true;
-      if (sat.static) {
-        if (sat.type === 'Launch Facility') {
-          var launchSite = objectManager.extractLaunchSite(sat.name);
-          satHoverBoxNode1.textContent = (launchSite.site + ', ' + launchSite.sitec);
-          satHoverBoxNode2.innerHTML = (sat.type + satellite.distance(sat, selectedSatData) + '');
-          satHoverBoxNode3.textContent = ('');
-        } else if (sat.type === 'Control Facility') {
-            satHoverBoxNode1.textContent = sat.name;
-            satHoverBoxNode2.innerHTML = (sat.typeExt + satellite.distance(sat, selectedSatData) + '');
-            satHoverBoxNode3.textContent = ('');
-        } else if (sat.type === 'Star') {
-          if (starManager.findStarsConstellation(sat.name) !== null) {
-            satHoverBoxNode1.innerHTML = (sat.name + '</br>' + starManager.findStarsConstellation(sat.name));
-          } else {
-            satHoverBoxNode1.textContent = (sat.name);
-          }
-          satHoverBoxNode2.innerHTML = (sat.type);
-          satHoverBoxNode3.innerHTML = ('RA: ' + sat.ra.toFixed(3) + ' deg </br> DEC: ' + sat.dec.toFixed(3) + ' deg');
-          starManager.drawConstellations(starManager.findStarsConstellation(sat.name));
-        } else {
-          satHoverBoxNode1.textContent = (sat.name);
-          satHoverBoxNode2.innerHTML = (sat.type + satellite.distance(sat, selectedSatData) + '');
-          satHoverBoxNode3.textContent = ('');
-        }
-      } else if (sat.missile) {
-        satHoverBoxNode1.innerHTML = (sat.ON + '<br \>' + sat.desc + '');
-        satHoverBoxNode2.textContent = '';
-        satHoverBoxNode3.textContent = '';
-      } else {
-        if (objectManager.isSensorManagerLoaded && sensorManager.checkSensorSelected() && isShowNextPass && isShowDistance) {
-          satHoverBoxNode1.textContent = (sat.ON);
-          satHoverBoxNode2.textContent = (sat.SCC_NUM);
-          satHoverBoxNode3.innerHTML = (satellite.nextpass(sat) + satellite.distance(sat, selectedSatData) + '');
-        } else if (isShowDistance) {
-          satHoverBoxNode1.textContent = (sat.ON);
-          satHoverBoxNode2.innerHTML = (sat.SCC_NUM + satellite.distance(sat, selectedSatData) + '');
-          satHoverBoxNode3.innerHTML = ('X: ' + sat.position.x.toFixed(2) + ' Y: ' + sat.position.y.toFixed(2) + ' Z: ' + sat.position.z.toFixed(2) + '</br>' +
-                                          'X: ' + sat.velocityX.toFixed(2) + 'km/s Y: ' + sat.velocityY.toFixed(2) + 'km/s Z: ' + sat.velocityZ.toFixed(2)) + 'km/s';
-        } else if (objectManager.isSensorManagerLoaded && sensorManager.checkSensorSelected() && isShowNextPass) {
-          satHoverBoxNode1.textContent = (sat.ON);
-          satHoverBoxNode2.textContent = (sat.SCC_NUM);
-          satHoverBoxNode3.textContent = (satellite.nextpass(sat));
-        } else {
-          satHoverBoxNode1.textContent = (sat.ON);
-          satHoverBoxNode2.textContent = (sat.SCC_NUM);
-          satHoverBoxNode3.innerHTML = ('X: ' + sat.position.x.toFixed(2) + ' Y: ' + sat.position.y.toFixed(2) + ' Z: ' + sat.position.z.toFixed(2) + '</br>' +
-                                          'X: ' + sat.velocityX.toFixed(2) + ' Y: ' + sat.velocityY.toFixed(2) + ' Z: ' + sat.velocityZ.toFixed(2));
-        }
-      }
-      satHoverBoxDOM.css({
-        display: 'block',
-        'text-align': 'center',
-        position: 'absolute',
-        left: satX + 20,
-        top: satY - 10
-      });
-      canvasDOM.css({cursor: 'pointer'});
-    }
-  }
-  function _onDrawLoopComplete (cb) {
-    if (typeof cb == 'undefined') return;
-    cb();
-  }
   var demoModeSatellite = 0;
   var demoModeLastTime = 0;
   function _demoMode () {
@@ -1210,43 +534,15 @@ function _unProject (mx, my) {
 
   return [worldVec[0] / worldVec[3], worldVec[1] / worldVec[3], worldVec[2] / worldVec[3]];
 }
-function _normalizeAngle (angle) {
-  angle %= TAU;
-  if (angle > Math.PI) angle -= TAU;
-  if (angle < -Math.PI) angle += TAU;
-  return angle;
-}
 function getSatIdFromCoord (x, y) {
-  // OPTIMIZE: Find a way to do this without using gl.readPixels!
-  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.pickFb);
-  gl.readPixels(x, gl.drawingBufferHeight - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pickColorBuf);
-  return ((pickColorBuf[2] << 16) | (pickColorBuf[1] << 8) | (pickColorBuf[0])) - 1;
-}
-function getEarthScreenPoint (x, y) {
-  rayOrigin = getCamPos();
-  ptThru = _unProject(x, y);
-
-  rayDir = vec3.create();
-  vec3.subtract(rayDir, ptThru, rayOrigin); // rayDir = ptThru - rayOrigin
-  vec3.normalize(rayDir, rayDir);
-
-  toCenterVec = vec3.create();
-  vec3.scale(toCenterVec, rayOrigin, -1); // toCenter is just -camera pos because center is at [0,0,0]
-  dParallel = vec3.dot(rayDir, toCenterVec);
-
-  longDir = vec3.create();
-  vec3.scale(longDir, rayDir, dParallel); // longDir = rayDir * distParallel
-  vec3.add(ptThru, rayOrigin, longDir); // ptThru is now on the plane going through the center of sphere
-  dPerp = vec3.len(ptThru);
-
-  dSubSurf = Math.sqrt(RADIUS_OF_EARTH * RADIUS_OF_EARTH - dPerp * dPerp);
-  dSurf = dParallel - dSubSurf;
-
-  ptSurf = vec3.create();
-  vec3.scale(ptSurf, rayDir, dSurf);
-  vec3.add(ptSurf, ptSurf, rayOrigin);
-
-  return ptSurf;
+  canvasManager.renderer.setRenderTarget(canvasManager.pickingTexture);
+  canvasManager.renderer.render(canvasManager.pickingScene, canvasManager.camera);
+  canvasManager.renderer.setRenderTarget(null);
+  canvasManager.pixelBuffer = new Uint8Array(4);
+  canvasManager.renderer.readRenderTargetPixels(
+    canvasManager.pickingTexture, x, gl.drawingBufferHeight - y,
+    1, 1, canvasManager.pixelBuffer );
+  return ((canvasManager.pixelBuffer[2] << 16) | (canvasManager.pixelBuffer[1] << 8) | (canvasManager.pixelBuffer[0])) - 1;
 }
 function getCamPos () {
   gCPr = _getCamDist();
