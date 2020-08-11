@@ -129,9 +129,6 @@ var drawLoopCallback;
     if (typeof settingsManager.tleSource == 'undefined') {
       settingsManager.tleSource = 'tle/TLE.json';
     }
-    webGlInit();
-    atmosphere.init();
-    earth.init();
     ColorScheme.init();
     $('#loader-text').text('Drawing Dots in Space...');
     satSet.init(function satSetInitCallBack (satData) {
@@ -319,7 +316,7 @@ var drawLoopCallback;
     });
   });
 
-  var drawLoopCount = 0;
+
 
   function drawLoop () {
     return;
@@ -342,35 +339,7 @@ var drawLoopCallback;
 
     // var bubble = new FOVBubble();
     // bubble.set();
-    // bubble.draw();
-
-    if (settingsManager.screenshotMode) {
-      webGlInit();
-      if (settingsManager.queuedScreenshot) return;
-
-      setTimeout(function () {
-        let link = document.createElement('a');
-        link.download = 'keeptrack.png';
-
-        let d = new Date();
-        let n = d.getFullYear();
-        let copyrightStr;
-        if (!settingsManager.copyrightOveride) {
-          copyrightStr = `©${n} KEEPTRACK.SPACE`;
-        } else {
-          copyrightStr = '';
-        }
-
-        link.href = _watermarkedDataURL(canvasDOM2[0],copyrightStr);
-        settingsManager.screenshotMode = false;
-        settingsManager.queuedScreenshot = false;
-        setTimeout(function () {
-          link.click();
-        }, 10);
-        webGlInit();
-      }, 200);
-      settingsManager.queuedScreenshot = true;
-    }
+    // bubble.draw();    
   }
 
 
@@ -407,115 +376,6 @@ var drawLoopCallback;
   }
 })();
 
-function _fixDpi(canvas, dpi) {
-//create a style object that returns width and height
-  let style = {
-    height() {
-      return +getComputedStyle(canvas).getPropertyValue('height').slice(0,-2);
-    },
-    width() {
-      return +getComputedStyle(canvas).getPropertyValue('width').slice(0,-2);
-    }
-  };
-//set the correct attributes for a crystal clear image!
-  canvas.setAttribute('width', style.width() * dpi);
-  canvas.setAttribute('height', style.height() * dpi);
-}
-
-function webGlInit () {
-  db.log('webGlInit');
-  let can = canvasDOM[0];
-  let dpi;
-  if (typeof settingsManager.dpi != 'undefined') {
-    dpi = settingsManager.dpi;
-  } else {
-    dpi = window.devicePixelRatio;
-  }
-
-  _fixDpi(can,dpi);
-
-  if (settingsManager.screenshotMode) {
-    can.width = settingsManager.hiResWidth;
-    can.height = settingsManager.hiResHeight;
-  } else {
-    can.width = window.innerWidth;
-    can.height = window.innerHeight;
-  }
-
-  // Desynchronized Fixed Jitter on Old Computer
-  var gl = can.getContext('webgl', {alpha: false, desynchronized: true}) || can.getContext('experimental-webgl', {alpha: false, desynchronized: true});
-  if (!gl) {
-    browserUnsupported();
-  }
-
-  gl.viewport(0, 0, can.width, can.height);
-
-  gl.enable(gl.DEPTH_TEST);
-
-  // gl.enable(0x8642);
-  /* enable point sprites(?!) This might get browsers with
-  underlying OpenGL to behave
-  although it's not technically a part of the WebGL standard
-  */
-
-  var pFragShader = gl.createShader(gl.FRAGMENT_SHADER);
-  var pFragCode = shaderLoader.getShaderCode('pick-fragment.glsl');
-  gl.shaderSource(pFragShader, pFragCode);
-  gl.compileShader(pFragShader);
-
-  var pVertShader = gl.createShader(gl.VERTEX_SHADER);
-  var pVertCode = shaderLoader.getShaderCode('pick-vertex.glsl');
-  gl.shaderSource(pVertShader, pVertCode);
-  gl.compileShader(pVertShader);
-
-  var pickShaderProgram = gl.createProgram();
-  gl.attachShader(pickShaderProgram, pVertShader);
-  gl.attachShader(pickShaderProgram, pFragShader);
-  gl.linkProgram(pickShaderProgram);
-
-  pickShaderProgram.aPos = gl.getAttribLocation(pickShaderProgram, 'aPos');
-  pickShaderProgram.aColor = gl.getAttribLocation(pickShaderProgram, 'aColor');
-  pickShaderProgram.aPickable = gl.getAttribLocation(pickShaderProgram, 'aPickable');
-  pickShaderProgram.uCamMatrix = gl.getUniformLocation(pickShaderProgram, 'uCamMatrix');
-  pickShaderProgram.uMvMatrix = gl.getUniformLocation(pickShaderProgram, 'uMvMatrix');
-  pickShaderProgram.uPMatrix = gl.getUniformLocation(pickShaderProgram, 'uPMatrix');
-
-  gl.pickShaderProgram = pickShaderProgram;
-
-  pickFb = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, pickFb);
-
-  pickTex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, pickTex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); // makes clearing work
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.drawingBufferWidth, gl.drawingBufferHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-
-  var rb = gl.createRenderbuffer(); // create RB to store the depth buffer
-  gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
-  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.drawingBufferWidth, gl.drawingBufferHeight);
-
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pickTex, 0);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
-
-  gl.pickFb = pickFb;
-
-  pickColorBuf = new Uint8Array(4);
-
-  pMatrix = mat4.create();
-  mat4.perspective(pMatrix, settingsManager.fieldOfView, gl.drawingBufferWidth / gl.drawingBufferHeight, 20.0, 600000.0);
-  var eciToOpenGlMat = [
-    1, 0, 0, 0,
-    0, 0, -1, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1
-  ];
-  mat4.mul(pMatrix, pMatrix, eciToOpenGlMat); // pMat = pMat * ecioglMat
-
-  window.gl = gl;
-}
 function _getCamDist () {
   db.log('_getCamDist', true);
   return Math.pow(zoomLevel, ZOOM_EXP) * (DIST_MAX - DIST_MIN) + DIST_MIN;
@@ -540,7 +400,7 @@ function getSatIdFromCoord (x, y) {
   canvasManager.renderer.setRenderTarget(null);
   canvasManager.pixelBuffer = new Uint8Array(4);
   canvasManager.renderer.readRenderTargetPixels(
-    canvasManager.pickingTexture, x, gl.drawingBufferHeight - y,
+    canvasManager.pickingTexture, x, canvasManager.renderer.getContext().drawingBufferHeight - y,
     1, 1, canvasManager.pixelBuffer );
   return ((canvasManager.pixelBuffer[2] << 16) | (canvasManager.pixelBuffer[1] << 8) | (canvasManager.pixelBuffer[0])) - 1;
 }

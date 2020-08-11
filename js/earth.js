@@ -29,7 +29,7 @@ ATMOSPHERE_DIST_MIN = 200;
 
 // Earth
 (function () {
-  var earth = {};
+
   var NUM_LAT_SEGS = 64;
   var NUM_LON_SEGS = 64;
   var createClockDOMOnce = false;
@@ -46,8 +46,7 @@ ATMOSPHERE_DIST_MIN = 200;
   earth.earthJ = 0;
   earth.earthEra = 0;
   earth.timeTextStr = '';
-  earth.timeTextStrEmpty = '';
-  earth.lightDirection = [];
+  earth.timeTextStrEmpty = '';  
   earth.propRateDOM = $('#propRate-status-box');
   var earthShader;
 

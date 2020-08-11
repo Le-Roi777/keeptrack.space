@@ -39,7 +39,6 @@ onmessage = function (m) {
   }
 
   if (m.data.isInit) {
-    console.log(m.data);
     var satData = JSON.parse(m.data.satData);
     var sLen = satData.length - 1;
     let i = -1;

@@ -14,8 +14,8 @@
 
   var ColorScheme = function (colorizer) {
     this.colorizer = colorizer;
-    this.colorBuf = gl.createBuffer();
-    this.pickableBuf = gl.createBuffer();
+    // this.colorBuf = gl.createBuffer();
+    // this.pickableBuf = gl.createBuffer();
   };
 
   ColorScheme.objectTypeFlags = {};

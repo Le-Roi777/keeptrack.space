@@ -14,9 +14,9 @@
   var jDayDiff;
 
   timeManager.dateObject = new Date();
-  timeManager.nowTemp = timeManager.dateObject;
+  timeManager.lastDrawTimeTemp = timeManager.dateObject;
 
-  timeManager.now = propFrozen; // (initialized as Date.now)
+  timeManager.lastDrawTime = propFrozen; // (initialized as Date.now)
   timeManager.propRealTime = propFrozen; // actual time we're running it (initialized as Date.now)
   timeManager.propOffset = 0.0; // offset we're propagating to, msec
   timeManager.propRate = 1.0; // time rate multiplier for propagation
@@ -138,12 +138,12 @@
   // Propagation Time Functions
   timeManager.propTime = function () {
     if (timeManager.propRate === 0) {
-      timeManager.nowTemp.setTime(Number(propFrozen) + timeManager.propOffset);
+      timeManager.lastDrawTimeTemp.setTime(Number(propFrozen) + timeManager.propOffset);
     } else {
-      timeManager.nowTemp.setTime(Number(timeManager.propRealTime) + timeManager.propOffset +
-                                 ((Number(timeManager.now) - Number(timeManager.propRealTime)) * timeManager.propRate));
+      timeManager.lastDrawTimeTemp.setTime(Number(timeManager.propRealTime) + timeManager.propOffset +
+                                 ((Number(timeManager.lastDrawTime) - Number(timeManager.propRealTime)) * timeManager.propRate));
     }
-    return timeManager.nowTemp;
+    return timeManager.lastDrawTimeTemp;
   };
 
   timeManager.propTimeCheck = function (propTempOffset, propRealTime) {
@@ -163,8 +163,8 @@
     selectedDate = selectedDate.split(' ');
     selectedDate = new Date(selectedDate[0] + 'T' + selectedDate[1] + 'Z');
     var today = new Date();
-    timeManager.propOffset = selectedDate - today;
-    return timeManager.propOffset;
+    let propOffset = selectedDate - today;
+    return propOffset;
   };
 
   timeManager.dateToISOLikeButLocal = function(date) {

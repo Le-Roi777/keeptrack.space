@@ -234,28 +234,6 @@ var hoveringSat = -1;
         }
       }
     })();
-    dotShader = gl.createProgram();
-
-    vertShader = gl.createShader(gl.VERTEX_SHADER);
-    gl.shaderSource(vertShader, shaderLoader.getShaderCode('dot-vertex-var.glsl'));
-    gl.compileShader(vertShader);
-
-    fragShader = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(fragShader, shaderLoader.getShaderCode('dot-fragment.glsl'));
-    gl.compileShader(fragShader);
-
-    gl.attachShader(dotShader, vertShader);
-    gl.attachShader(dotShader, fragShader);
-    gl.linkProgram(dotShader);
-
-    dotShader.aPos = gl.getAttribLocation(dotShader, 'aPos');
-    dotShader.aColor = gl.getAttribLocation(dotShader, 'aColor');
-    dotShader.aStar = gl.getAttribLocation(dotShader, 'aStar');
-    dotShader.minSize = gl.getUniformLocation(dotShader, 'minSize');
-    dotShader.maxSize = gl.getUniformLocation(dotShader, 'maxSize');
-    dotShader.uMvMatrix = gl.getUniformLocation(dotShader, 'uMvMatrix');
-    dotShader.uCamMatrix = gl.getUniformLocation(dotShader, 'uCamMatrix');
-    dotShader.uPMatrix = gl.getUniformLocation(dotShader, 'uPMatrix');
 
     try {
       var tleSource = settingsManager.tleSource;
@@ -1412,7 +1390,6 @@ var hoveringSat = -1;
     if (selectedSat !== -1) {
       // gl.bufferSubData(gl.ARRAY_BUFFER, selectedSat * 4 * 4, new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(selectedSat)).color));
       canvasManager.objects.sats.geometry.attributes.color.array.set(new Float32Array(settingsManager.currentColorScheme.colorizer(satSet.getSat(selectedSat)).color), selectedSat * 4);
-      console.log(1);
     }
     // If New Select Sat Picked Color it
     if (i !== -1) {

@@ -508,7 +508,7 @@ var isAnalysisMenuOpen = false;
         //
         // This not the Earth
 
-        if (typeof latLon == 'undefined' || isNaN(latLon.latitude) || isNaN(latLon.longitude)) {
+        if (latLon == null) {
         } else { // This is the Earth
           if (!isViewDOM) {
             rightBtnViewDOM.show();
@@ -1773,8 +1773,8 @@ var isAnalysisMenuOpen = false;
         timeManager.propRealTime = Date.now();
         timeManager.propTime();
         // Reset last update times when going backwards in time
-        lastOverlayUpdateTime = timeManager.now * 1 - 7000;
-        lastBoxUpdateTime = timeManager.now;
+        lastOverlayUpdateTime = timeManager.lastDrawTime * 1 - 7000;
+        lastBoxUpdateTime = timeManager.lastDrawTime;
         _updateNextPassOverlay(true);
         e.preventDefault();
       });
@@ -2989,8 +2989,8 @@ var isAnalysisMenuOpen = false;
             break;
           } else {
             uiManager.hideSideMenus();
-            if ((nextPassArray.length === 0 || nextPassEarliestTime > timeManager.now ||
-                new Date(nextPassEarliestTime * 1 + (1000 * 60 * 60 * 24)) < timeManager.now) ||
+            if ((nextPassArray.length === 0 || nextPassEarliestTime > timeManager.lastDrawTime ||
+                new Date(nextPassEarliestTime * 1 + (1000 * 60 * 60 * 24)) < timeManager.lastDrawTime) ||
                 isWatchlistChanged) {
               $('#loading-screen').fadeIn('slow', function () {
                   nextPassArray = [];
@@ -3001,7 +3001,7 @@ var isAnalysisMenuOpen = false;
                   nextPassArray.sort(function(a, b) {
                       return new Date(a.time) - new Date(b.time);
                   });
-                  nextPassEarliestTime = timeManager.now;
+                  nextPassEarliestTime = timeManager.lastDrawTime;
                   lastOverlayUpdateTime = 0;
                 _updateNextPassOverlay(true);
                 $('#loading-screen').fadeOut();
@@ -4266,11 +4266,11 @@ var isAnalysisMenuOpen = false;
   function _showSatTest () {
     return;
     // db.log('_showSatTest');
-    // if (timeManager.now > (lastSatUpdateTime * 1 + 10000)) {
+    // if (timeManager.lastDrawTime > (lastSatUpdateTime * 1 + 10000)) {
     //   for (var i = 0; i < satSet.getSatData().length; i++) {
     //     satNumberOverlay[i] = satSet.getScreenCoords(i, pMatrix, camMatrix);
     //     if (satNumberOverlay[i] !== 1) console.log(satNumberOverlay[i]);
-    //     lastSatUpdateTime = timeManager.now;
+    //     lastSatUpdateTime = timeManager.lastDrawTime;
     //   }
     // }
 
@@ -4282,7 +4282,7 @@ var isAnalysisMenuOpen = false;
 
     // FIXME This should auto update the overlay when the time changes outside the original search window
     // Update once every 10 seconds
-    if (((timeManager.now > (lastOverlayUpdateTime * 1 + 10000) &&
+    if (((timeManager.lastDrawTime > (lastOverlayUpdateTime * 1 + 10000) &&
                            selectedSat === -1) &&
                            !isDragging && zoomLevel === zoomTarget) || isForceUpdate) {
       var propTime = timeManager.propTime();
@@ -4320,7 +4320,7 @@ var isAnalysisMenuOpen = false;
       }
       infoOverlayDOM.push('</div>');
       document.getElementById('info-overlay-content').innerHTML = infoOverlayDOM.join('');
-      lastOverlayUpdateTime = timeManager.now;
+      lastOverlayUpdateTime = timeManager.lastDrawTime;
     }
   }
   function _checkWatchlist () {
@@ -4358,7 +4358,7 @@ var isAnalysisMenuOpen = false;
     if (sat.static) return;
 
     // IDEA: Include updates when satellite edited regardless of time.
-    if (timeManager.now > (lastBoxUpdateTime * 1 + updateInterval)) {
+    if (timeManager.lastDrawTime > (lastBoxUpdateTime * 1 + updateInterval)) {
       if (!sat.missile) {
         if (objectManager.isSensorManagerLoaded) {
           sat.getTEARR();
@@ -4379,9 +4379,9 @@ var isAnalysisMenuOpen = false;
       var jday = 'JDAY: ' + timeManager.getDayOfYear(timeManager.propTime());
       $('#jday').html(jday);
 
-      if (settingsManager.isMapMenuOpen && timeManager.now > settingsManager.lastMapUpdateTime + 30000) {
+      if (settingsManager.isMapMenuOpen && timeManager.lastDrawTime > settingsManager.lastMapUpdateTime + 30000) {
         uiManager.updateMap();
-        settingsManager.lastMapUpdateTime = timeManager.now;
+        settingsManager.lastMapUpdateTime = timeManager.lastDrawTime;
       }
 
       $('#sat-altitude').html(sat.getAltitude().toFixed(2) + ' km');
@@ -4423,7 +4423,7 @@ var isAnalysisMenuOpen = false;
         $('#sat-nextpass').parent().hide();
       }
 
-      lastBoxUpdateTime = timeManager.now;
+      lastBoxUpdateTime = timeManager.lastDrawTime;
     }
   }
   function _mobileScreenControls () {

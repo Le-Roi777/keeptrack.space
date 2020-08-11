@@ -8,9 +8,13 @@ var RADIUS_OF_DRAW_MOON = 6500;
 var MOON_SCALAR_DISTANCE = 7500;
 
 let lastDrawTime = 0;
+var earth = {};
+earth.lightDirection = [];
 let earthInfo = {};
 let earthNow = 0;
 let createClockDOMOnce = false;
+
+var isPropRateVisible = false;
 
 let satBuf;
 // let satPosBuf;
@@ -215,8 +219,11 @@ canvasManager.start = () => {
   function main() {
     const canvas = document.getElementById('keep3-canvas');
 
-    canvasManager.renderer = new THREE.WebGLRenderer({canvas});
-    // canvasManager.renderer.antialias = true;
+    canvasManager.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      preserveDrawingBuffer: true
+    });
 
     // picking
     canvasManager.pickingScene = new THREE.Scene();
@@ -247,7 +254,11 @@ canvasManager.start = () => {
       canvasManager.pickingTexture.width = canvas.width;
       canvasManager.pickingTexture.height = canvas.height;
 
-      canvasManager.renderer = new THREE.WebGLRenderer({canvas});
+      canvasManager.renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        preserveDrawingBuffer: true
+      });
       canvasManager.aspect = canvas.width / canvas.height;
     };
     canvasManager.resizeCanvas();
@@ -290,7 +301,6 @@ canvasManager.start = () => {
     var rayOrigin, ptThru, rayDir, toCenterVec, dParallel, longDir, dPerp, dSubSurf,
         dSurf, ptSurf;
 
-
     function render(renderTime) {
       // Setup Time
       {
@@ -321,38 +331,48 @@ canvasManager.start = () => {
           updateHoverDelayLimit = 15;
         } else {
           if (updateHoverDelayLimit > 1)
-            --updateHoverDelayLimit;
+          --updateHoverDelayLimit;
         }
 
 
         time = drawNow;
-        timeManager.now = drawNow;
+        // Update Official Time
+        timeManager.lastDrawTime = drawNow;
       }
 
       // Setup Camera Pitch/yaw
-
       {
         if ((isDragging && !settingsManager.isMobileModeEnabled) ||
              isDragging && settingsManager.isMobileModeEnabled && (mouseX !== 0 || mouseY !== 0)) {
           // Raycasting on the Earth Disabled - Feels Faster
-          dragTarget = getEarthScreenPoint(mouseX, mouseY);
-          if (typeof dragPoint == 'undefined' || typeof dragTarget == 'undefined' ||
-              typeof dragTarget.uv.x == 'undefined' || typeof dragTarget.uv.y == 'undefined' ||
-              typeof dragPoint.uv.x == 'undefined' || typeof dragPoint.uv.y == 'undefined' ||
-          cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY ||
-          settingsManager.isMobileModeEnabled) { // random screen drag
-            xDif = screenDragPoint[0] - mouseX;
-            yDif = screenDragPoint[1] - mouseY;
-            yawTarget = dragStartYaw + xDif * settingsManager.cameraMovementSpeed;
-            pitchTarget = dragStartPitch + yDif * -settingsManager.cameraMovementSpeed;
-            camPitchSpeed = _normalizeAngle(camPitch - pitchTarget) * -settingsManager.cameraMovementSpeed;
-            camYawSpeed = _normalizeAngle(camYaw - yawTarget) * -settingsManager.cameraMovementSpeed;
-          } else {  // earth surface point drag
-            pitchDif = dragPoint.uv.y - dragTarget.uv.y;
-            yawDif = _normalizeAngle(dragPoint.uv.x - dragTarget.uv.x);
-            camPitchSpeed = pitchDif * settingsManager.cameraMovementSpeed;
-            camYawSpeed = yawDif * settingsManager.cameraMovementSpeed;
+          {
+            // dragTarget = getEarthScreenPoint(mouseX, mouseY);
+            // if (typeof dragPoint == 'undefined' || typeof dragTarget == 'undefined' ||
+            //     typeof dragTarget.uv.x == 'undefined' || typeof dragTarget.uv.y == 'undefined' ||
+            //     typeof dragPoint.uv.x == 'undefined' || typeof dragPoint.uv.y == 'undefined' ||
+            // cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY ||
+            // settingsManager.isMobileModeEnabled) { // random screen drag
+            //   xDif = screenDragPoint[0] - mouseX;
+            //   yDif = screenDragPoint[1] - mouseY;
+            //   yawTarget = dragStartYaw + xDif * settingsManager.cameraMovementSpeed;
+            //   pitchTarget = dragStartPitch + yDif * -settingsManager.cameraMovementSpeed;
+            //   camPitchSpeed = _normalizeAngle(camPitch - pitchTarget) * -settingsManager.cameraMovementSpeed;
+            //   camYawSpeed = _normalizeAngle(camYaw - yawTarget) * -settingsManager.cameraMovementSpeed;
+            // } else {  // earth surface point drag
+            //   pitchDif = dragPoint.uv.y - dragTarget.uv.y;
+            //   yawDif = _normalizeAngle(dragPoint.uv.x - dragTarget.uv.x);
+            //   camPitchSpeed = pitchDif * settingsManager.cameraMovementSpeed;
+            //   camYawSpeed = yawDif * settingsManager.cameraMovementSpeed;
+            // }
           }
+
+          xDif = screenDragPoint[0] - mouseX;
+          yDif = screenDragPoint[1] - mouseY;
+          yawTarget = dragStartYaw + xDif * settingsManager.cameraMovementSpeed;
+          pitchTarget = dragStartPitch + yDif * -settingsManager.cameraMovementSpeed;
+          camPitchSpeed = _normalizeAngle(camPitch - pitchTarget) * -settingsManager.cameraMovementSpeed;
+          camYawSpeed = _normalizeAngle(camYaw - yawTarget) * -settingsManager.cameraMovementSpeed;
+
           camSnapMode = false;
         } else {
           // DESKTOP ONLY
@@ -451,7 +471,7 @@ canvasManager.start = () => {
       _drawEarth();
       _drawMoon();
       _drawSun();
-      _drawSat(renderTime);
+      _drawSat(drawNow);
 
       _updateHover();
       orbitDisplay.glBuffers.traverseVisible(function(child) {
@@ -464,32 +484,33 @@ canvasManager.start = () => {
       canvasManager.camera.position.z =_getCamDist();
 
       canvasManager.scene.rotation.x = camPitch;
-      canvasManager.scene.rotation.y = -camYaw;
+      canvasManager.scene.rotation.y = -camYaw - earthInfo.earthEra;
 
       canvasManager.pickingScene.rotation.x = camPitch;
-      canvasManager.pickingScene.rotation.y = -camYaw;
+      canvasManager.pickingScene.rotation.y = -camYaw - earthInfo.earthEra;
 
       canvasManager.renderer.render(canvasManager.scene, canvasManager.camera);
       // Debug See id encoding
       // canvasManager.renderer.render(canvasManager.pickingScene, canvasManager.camera);
       _onDrawLoopComplete(drawLoopCallback);
 
+      _screenshotCheck();
       requestAnimationFrame(render);
     }
     requestAnimationFrame(render);
     canvasManager.lines = [];
     canvasManager.scene.add(canvasManager.objects.ambientLight);
 
-    canvasManager.scene.add(canvasManager.objects.sun);
     // canvasManager.scene.add(canvasManager.objects.sun.lightEarth);
-    canvasManager.scene.add(canvasManager.objects.sun.lightMoon.target);
-
-    canvasManager.scene.add(canvasManager.objects.moon);
+    canvasManager.objects.earth.add(canvasManager.objects.sun);
+    canvasManager.objects.earth.add(canvasManager.objects.sun.lightMoon.target);
+    canvasManager.objects.earth.add(canvasManager.objects.moon);
     canvasManager.scene.add(canvasManager.objects.earth);
-    canvasManager.pickingScene.add(canvasManager.objects.earthMask);
-
     canvasManager.scene.add(canvasManager.objects.sats);
+
+    canvasManager.pickingScene.add(canvasManager.objects.earthMask);
     canvasManager.pickingScene.add(canvasManager.objects.pickableSats);
+
 
     // canvasManager.addLine([[{x:0,y:0,z:0},{x:10000,y:0,z:0}]]);
     // canvasManager.addLine([[{x:0,y:0,z:0},{x:0,y:10000,z:0}]]);
@@ -500,6 +521,37 @@ canvasManager.start = () => {
   main();
   canvasManager.isReady = true;
 
+
+  function _screenshotCheck() {
+    // Resize for Screenshots
+    if (settingsManager.screenshotMode) {
+      if (settingsManager.queuedScreenshot) return;
+      canvasManager.resizeCanvas();
+
+      setTimeout(function () {
+        let link = document.createElement('a');
+        link.download = 'keeptrack.png';
+
+        let d = new Date();
+        let n = d.getFullYear();
+        let copyrightStr;
+        if (!settingsManager.copyrightOveride) {
+          copyrightStr = `©${n} KEEPTRACK.SPACE`;
+        } else {
+          copyrightStr = '';
+        }
+
+        link.href = _watermarkedDataURL(canvasDOM2[0],copyrightStr);
+        settingsManager.screenshotMode = false;
+        settingsManager.queuedScreenshot = false;
+        setTimeout(function () {
+          link.click();
+        }, 10);
+        canvasManager.resizeCanvas();
+      }, 200);
+      settingsManager.queuedScreenshot = true;
+    }
+  }
 
   function _drawSat(drawNow) {
     if (typeof satData == 'undefined') return;
@@ -542,7 +594,6 @@ canvasManager.start = () => {
         new THREE.BufferAttribute(new Float32Array(satPos), 3));
 
       satBuf.rotateX(-90 * DEG2RAD);
-      satBuf.rotateY(-earthInfo.earthEra);
 
       canvasManager.objects.sats.geometry.verticesNeedUpdate = true;
       canvasManager.objects.pickableSats.geometry.verticesNeedUpdate = true;
@@ -605,7 +656,7 @@ canvasManager.start = () => {
     earthInfo.earthJ += earthNow.getUTCMilliseconds() * MILLISECONDS_PER_DAY;
     earthInfo.earthEra = satellite.gstime(earthInfo.earthJ);
 
-    // canvasManager.objects.earth.rotation.y = earthInfo.earthEra;
+    canvasManager.objects.earth.rotation.y = earthInfo.earthEra;
   }
   function _drawMoon() {
     var now = timeManager.propTime();
@@ -1045,7 +1096,7 @@ canvasManager.lastRayTime = 0;
 canvasManager.rayCastInterval = 1000/30;
 function getEarthScreenPoint (x, y) {
   // Raycasting Disabled for Now
-  return;
+  // return;
   if (Date.now() - canvasManager.lastRayTime > canvasManager.rayCastInterval) {
     x = ( x / canvasDOM2.width() ) * 2 - 1;
     y = - ( y / canvasDOM2.height() ) * 2 + 1;
@@ -1067,11 +1118,11 @@ function _updateHover () {
   if (searchBox.isHovering()) {
     updateHoverSatId = searchBox.getHoverSat();
     satSet.getScreenCoords(updateHoverSatId, pMatrix, camMatrix);
-    if (!_earthHitTest(satScreenPositionArray.x, satScreenPositionArray.y)) {
-      _hoverBoxOnSat(updateHoverSatId, satScreenPositionArray.x, satScreenPositionArray.y);
-    } else {
-      _hoverBoxOnSat(-1, 0, 0);
-    }
+    _hoverBoxOnSat(updateHoverSatId, satScreenPositionArray.x, satScreenPositionArray.y);
+    // if (!_earthHitTest(satScreenPositionArray.x, satScreenPositionArray.y)) {
+    // } else {
+    //   _hoverBoxOnSat(-1, 0, 0);
+    // }
   } else {
     if (!isMouseMoving || isDragging || settingsManager.isMobileModeEnabled) { return; }
 
@@ -1110,7 +1161,30 @@ function _drawLines() {
   for (let i = 0; i < canvasManager.lines.length; i++) {
     if (typeof canvasManager.lines[i].geometry == 'undefined') {
       let thisLine = canvasManager.lines[i];
-      var material = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+      const fs = `
+          varying vec4 vColor;
+
+          void main(void) {
+            gl_FragColor = vec4(vColor);
+          }`;
+      const vs = `
+          attribute vec4 color;
+          varying vec4 vColor;
+
+          void main(void) {
+            vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+            gl_Position = projectionMatrix * modelViewPosition;
+            gl_PointSize = 1.0;
+
+            vColor = color;
+          }`;
+
+      const material = new THREE.ShaderMaterial({
+        vertexShader: vs,
+        fragmentShader: fs
+      });
+      material.transparent = true;
+
       let points = [];
       for (let i = 0; i < thisLine.length; i++) {
         points.push( new THREE.Vector3(thisLine[i].x, thisLine[i].y, thisLine[i].z) );
@@ -1131,6 +1205,7 @@ function _watermarkedDataURL(canvas,text){
   cw=tempCanvas.width=canvas.width;
   ch=tempCanvas.height=canvas.height;
   tempCtx.drawImage(canvas,0,0);
+  debugger;
   tempCtx.font = "24px nasalization";
   var textWidth = tempCtx.measureText(text).width;
   tempCtx.globalAlpha = 1.0;
