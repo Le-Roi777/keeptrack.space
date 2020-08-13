@@ -318,7 +318,6 @@ var isAnalysisMenuOpen = false;
 
         zoomTarget += delta / 100 / 50 / speedModifier; // delta is +/- 100
         zoomTarget = Math.min(Math.max(zoomTarget, 0), 1); // Force between 0 and 1
-        rotateTheEarth = false;
         camZoomSnappedOnSat = false;
 
         if (cameraType.current === cameraType.PLANETARIUM || cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current === cameraType.ASTRONOMY) {
@@ -326,7 +325,7 @@ var isAnalysisMenuOpen = false;
           $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
           if (settingsManager.fieldOfView > settingsManager.fieldOfViewMax) settingsManager.fieldOfView = settingsManager.fieldOfViewMax;
           if (settingsManager.fieldOfView < settingsManager.fieldOfViewMin) settingsManager.fieldOfView = settingsManager.fieldOfViewMin;
-          webGlInit();
+          // webGlInit();
         }
       });
       canvasDOM2.on("click", function (evt) {
@@ -354,7 +353,6 @@ var isAnalysisMenuOpen = false;
         // debugLine.set(dragPoint, getCamPos());
         isDragging = true;
         camSnapMode = false;
-        rotateTheEarth = false;
         rightBtnMenuDOM.hide();
         _clearRMBSubMenu();
 
@@ -369,25 +367,18 @@ var isAnalysisMenuOpen = false;
             startPinchDistance = Math.hypot(
               evt.originalEvent.touches[0].pageX - evt.originalEvent.touches[1].pageX,
               evt.originalEvent.touches[0].pageY - evt.originalEvent.touches[1].pageY);
-            // _pinchStart(evt);
         } else { // Single Finger Touch
           mouseX = evt.originalEvent.touches[0].clientX;
           mouseY = evt.originalEvent.touches[0].clientY;
           mouseSat = getSatIdFromCoord(mouseX, mouseY);
           settingsManager.cameraMovementSpeed = Math.max(0.005 * zoomLevel, settingsManager.cameraMovementSpeedMin);
           screenDragPoint = [mouseX, mouseY];
-          // dragPoint = getEarthScreenPoint(x, y);
           dragPoint = screenDragPoint; // Ignore the earth on mobile
           dragStartPitch = camPitch;
           dragStartYaw = camYaw;
-          // debugLine.set(dragPoint, getCamPos());
           isDragging = true;
           touchStartTime = Date.now();
-          // if (window.innerWidth <= 1000) {
-          //   isDragging = false;
-          // }
           camSnapMode = false;
-          rotateTheEarth = false;
 
           // TODO: Make updateUrl() a setting that is disabled by default
           uiManager.updateURL();
@@ -416,7 +407,6 @@ var isAnalysisMenuOpen = false;
         settingsManager.themes.redThemeSearch();
         dragHasMoved = false;
         isDragging = false;
-        rotateTheEarth = false;
       });
 
       function _openRmbMenu () {
@@ -580,7 +570,6 @@ var isAnalysisMenuOpen = false;
         mouseX = 0;
         dragHasMoved = false;
         isDragging = false;
-        rotateTheEarth = false;
       });
 
       $('#nav-wrapper *').on("click", function (evt) { _hidePopUps(); });
@@ -4069,8 +4058,7 @@ var isAnalysisMenuOpen = false;
       // console.log(Number(evt.charCode));
       switch (evt.key.toUpperCase()) {
         case 'R':
-          rotateTheEarth = !rotateTheEarth;
-          // console.log('toggled rotation');
+          canvasManager.controls.autoRotate = !canvasManager.controls.autoRotate;
           break;
         case 'C':
           if (cameraType.current === cameraType.PLANETARIUM) orbitDisplay.clearInViewOrbit(); // Clear Orbits if Switching from Planetarium View
@@ -4102,14 +4090,24 @@ var isAnalysisMenuOpen = false;
               $('#camera-status-box').html('Earth Centered Camera Mode');
               $('#fov-text').html('');
               zoomLevel = 0.5;
+              canvasManager.camera.position.x = 0;
+              canvasManager.camera.position.y = 0;
+              canvasManager.camera.position.z =_getCamDist();
+              canvasManager.camera.lookAt(0,0,0);
               break;
             case cameraType.OFFSET:
               $('#camera-status-box').html('Offset Camera Mode');
               $('#fov-text').html('');
+              canvasManager.camera.position.x = -15000;
+              canvasManager.camera.position.y = 6000;
+              canvasManager.camera.position.z =_getCamDist();
               break;
             case cameraType.FPS:
               $('#camera-status-box').html('Free Camera Mode');
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
+              fpsXPos = canvasManager.camera.position.x;
+              fpsYPos = canvasManager.camera.position.z;
+              fpsZPos = canvasManager.camera.position.y;
               break;
             case cameraType.PLANETARIUM:
               $('#camera-status-box').html('Planetarium Camera Mode');

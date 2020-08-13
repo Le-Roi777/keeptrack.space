@@ -135,7 +135,7 @@
         float r = 0.43 - min(abs(length(ptCoord)), 1.0);
         float alpha = pow(2.0 * r + 0.1, 3.0);
         alpha = min(alpha, 1.0);
-        gl_FragColor = vec4(vColor.rgb,1.0 * alpha);
+        gl_FragColor = vec4(vColor.rgb,vColor.a * alpha);
       }
     `
     }, {

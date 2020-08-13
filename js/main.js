@@ -119,7 +119,6 @@ var fpsLastTime = 1;
 
 var satScreenPositionArray = {};
 var isShowNextPass = false;
-var rotateTheEarth = true; // Set to False to disable initial rotation
 
 var drawLoopCallback;
 (function () {
@@ -143,129 +142,98 @@ var drawLoopCallback;
       })();
       let isFinalLoadingComplete = false;
       (function _finalLoadingSequence () {
-        if (!isFinalLoadingComplete && !canvasManager.isReady) {
+        if (!isFinalLoadingComplete && !canvasManager.isReady &&
+            canvasManager.isEarthDayLoaded &&
+            canvasManager.isEarthNightLoaded &&
+            canvasManager.isSunLoaded &&
+            canvasManager.isMoonLoaded) {
           setTimeout(function () {
             _finalLoadingSequence();
           }, 250);
           return;
         }
         if (isFinalLoadingComplete) return;
-        // NOTE:: This is called right after all the objects load on the screen.
 
-        // Version Info Updated
-        $('#version-info').html(settingsManager.versionNumber);
-        $('#version-info').tooltip({delay: 50, html: settingsManager.versionDate, position: 'top'});
-
-        $('body').attr('style', 'background:black');
-        $('#canvas-holder').attr('style', 'display:block');
-
-        mobile.checkMobileMode();
-
-        if (settingsManager.isMobileModeEnabled) { // Start Button Displayed
-          $('#mobile-start-button').show();
-          $('#spinner').hide();
-          $('#loader-text').html('');
-        } else { // Loading Screen Resized and Hidden
-          if (settingsManager.trusatMode) {
-              setTimeout(function () {
-                $('#loading-screen').removeClass('full-loader');
-                $('#loading-screen').addClass('mini-loader-container');
-                $('#logo-inner-container').addClass('mini-loader');
-                $('#logo-text').html('');
-                $('#logo-trusat').hide();
-                $('#loading-screen').hide();
-                $('#loader-text').html('Attempting to Math...');
-              }, 5000);
-          } else {
-            $('#loading-screen').removeClass('full-loader');
-            $('#loading-screen').addClass('mini-loader-container');
-            $('#logo-inner-container').addClass('mini-loader');
-            $('#logo-text').html('');
-            $('#logo-trusat').hide();
-            $('#loading-screen').hide();
-            $('#loader-text').html('Attempting to Math...');
-          }
-        }
-
-        satSet.setColorScheme(settingsManager.currentColorScheme); // force color recalc
+        satSet.setColorScheme(settingsManager.currentColorScheme, true); // force color recalc
         satSet.onCruncherReady();
 
-        (function _reloadLastSensor () {
-          let currentSensor = (!settingsManager.offline) ? JSON.parse(localStorage.getItem("currentSensor")) : null;
-          if (currentSensor !== null) {
-            try {
-              // If there is a staticnum set use that
-              if (typeof currentSensor[0] == 'undefined' || currentSensor[0] == null) {
-                sensorManager.setSensor(null, currentSensor[1]);
-              } else {
-                // If the sensor is a string, load that collection of sensors
-                if (typeof currentSensor[0].shortName == 'undefined') {
-                  sensorManager.setSensor(currentSensor[0], currentSensor[1]);
+        setTimeout(function () {
+          (function _reloadLastSensor () {
+            let currentSensor = JSON.parse(localStorage.getItem("currentSensor"));
+            if (currentSensor !== null) {
+              try {
+                // If there is a staticnum set use that
+                if (typeof currentSensor[0] == 'undefined' || currentSensor[0] == null) {
+                  sensorManager.setSensor(null, currentSensor[1]);
                 } else {
-                  // Seems to be a single sensor without a staticnum, load that
-                  sensorManager.setSensor(sensorManager.sensorList[currentSensor[0].shortName], currentSensor[1]);
+                  // If the sensor is a string, load that collection of sensors
+                  if (typeof currentSensor[0].shortName == 'undefined') {
+                    sensorManager.setSensor(currentSensor[0], currentSensor[1]);
+                  } else {
+                    // Seems to be a single sensor without a staticnum, load that
+                    sensorManager.setSensor(sensorManager.sensorList[currentSensor[0].shortName], currentSensor[1]);
+                  }
                 }
               }
-            }
-            catch (e){
-              console.warn('Saved Sensor Information Invalid');
-            }
-          }
-        })();
-        (function _watchlistInit () {
-          var watchlistJSON = (!settingsManager.offline) ? localStorage.getItem("watchlistList") : null;
-          if (watchlistJSON !== null) {
-            var newWatchlist = JSON.parse(watchlistJSON);
-            watchlistInViewList = [];
-            for (var i = 0; i < newWatchlist.length; i++) {
-              var sat = satSet.getSatExtraOnly(satSet.getIdFromObjNum(newWatchlist[i]));
-              if (sat !== null) {
-                newWatchlist[i] = sat.id;
-                watchlistInViewList.push(false);
-              } else {
-                console.error('Watchlist File Format Incorret');
-                return;
+              catch (e){
+                console.warn('Saved Sensor Information Invalid');
               }
             }
-            uiManager.updateWatchlist(newWatchlist, watchlistInViewList);
-          }
-        })();
-        (function _parseGetParameters () {
-          // do querystring stuff
-          var params = satSet.queryStr.split('&');
-
-          // Do Searches First
-          for (let i = 0; i < params.length; i++) {
-            let key = params[i].split('=')[0];
-            let val = params[i].split('=')[1];
-            if (key == 'search') {
-              // console.log('preloading search to ' + val);
-              // Sensor Selection takes 1.5 seconds to update color Scheme
-              // TODO: SensorManager might be the problem here, but this works
-              // _doDelayedSearch(val);
-              searchBox.doSearch(val);
+          })();
+          (function _watchlistInit () {
+            var watchlistJSON = (!settingsManager.offline) ? localStorage.getItem("watchlistList") : null;
+            if (watchlistJSON !== null) {
+              var newWatchlist = JSON.parse(watchlistJSON);
+              watchlistInViewList = [];
+              for (var i = 0; i < newWatchlist.length; i++) {
+                var sat = satSet.getSatExtraOnly(satSet.getIdFromObjNum(newWatchlist[i]));
+                if (sat !== null) {
+                  newWatchlist[i] = sat.id;
+                  watchlistInViewList.push(false);
+                } else {
+                  console.error('Watchlist File Format Incorret');
+                  return;
+                }
+              }
+              uiManager.updateWatchlist(newWatchlist, watchlistInViewList);
             }
-          }
+          })();
+          (function _parseGetParameters () {
+            // do querystring stuff
+            var params = satSet.queryStr.split('&');
 
-          // Then Do Other Stuff
-          for (let i = 0; i < params.length; i++) {
-            let key = params[i].split('=')[0];
-            let val = params[i].split('=')[1];
-            let urlSatId;
-            switch (key) {
-              case 'intldes':
+            // Do Searches First
+            for (let i = 0; i < params.length; i++) {
+              let key = params[i].split('=')[0];
+              let val = params[i].split('=')[1];
+              if (key == 'search') {
+                // console.log('preloading search to ' + val);
+                // Sensor Selection takes 1.5 seconds to update color Scheme
+                // TODO: SensorManager might be the problem here, but this works
+                // _doDelayedSearch(val);
+                searchBox.doSearch(val);
+              }
+            }
+
+            // Then Do Other Stuff
+            for (let i = 0; i < params.length; i++) {
+              let key = params[i].split('=')[0];
+              let val = params[i].split('=')[1];
+              let urlSatId;
+              switch (key) {
+                case 'intldes':
                 urlSatId = satSet.getIdFromIntlDes(val.toUpperCase());
                 if (urlSatId !== null) {
                   selectSat(urlSatId);
                 }
                 break;
-              case 'sat':
+                case 'sat':
                 urlSatId = satSet.getIdFromObjNum(val.toUpperCase());
                 if (urlSatId !== null) {
                   selectSat(urlSatId);
                 }
                 break;
-              case 'misl':
+                case 'misl':
                 var subVal = val.split(',');
                 $('#ms-type').val(subVal[0].toString());
                 $('#ms-attacker').val(subVal[1].toString());
@@ -276,7 +244,7 @@ var drawLoopCallback;
                 // $('#ms-lon').val() * 1;
                 $('#missile').trigger("submit");
                 break;
-              case 'date':
+                case 'date':
                 timeManager.propOffset = Number(val) - Date.now();
                 $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
                 satCruncher.postMessage({
@@ -284,7 +252,7 @@ var drawLoopCallback;
                   dat: (timeManager.propOffset).toString() + ' ' + (timeManager.propRate).toString()
                 });
                 break;
-              case 'rate':
+                case 'rate':
                 val = Math.min(val, 1000);
                 // could run time backwards, but let's not!
                 val = Math.max(val, 0.0);
@@ -295,23 +263,61 @@ var drawLoopCallback;
                   dat: (timeManager.propOffset).toString() + ' ' + (timeManager.propRate).toString()
                 });
                 break;
+              }
+            }
+          })();
+
+          // NOTE:: This is called right after all the objects load on the screen.
+          // Version Info Updated
+          $('#version-info').html(settingsManager.versionNumber);
+          $('#version-info').tooltip({delay: 50, html: settingsManager.versionDate, position: 'top'});
+
+          $('body').attr('style', 'background:black');
+          $('#canvas-holder').attr('style', 'display:block');
+
+          mobile.checkMobileMode();
+
+          if (settingsManager.isMobileModeEnabled) { // Start Button Displayed
+            $('#mobile-start-button').show();
+            $('#spinner').hide();
+            $('#loader-text').html('');
+          } else { // Loading Screen Resized and Hidden
+            if (settingsManager.trusatMode) {
+                setTimeout(function () {
+                  $('#loading-screen').removeClass('full-loader');
+                  $('#loading-screen').addClass('mini-loader-container');
+                  $('#logo-inner-container').addClass('mini-loader');
+                  $('#logo-text').html('');
+                  $('#logo-trusat').hide();
+                  $('#loading-screen').hide();
+                  $('#loader-text').html('Attempting to Math...');
+                }, 5000);
+            } else {
+              $('#loading-screen').removeClass('full-loader');
+              $('#loading-screen').addClass('mini-loader-container');
+              $('#logo-inner-container').addClass('mini-loader');
+              $('#logo-text').html('');
+              $('#logo-trusat').hide();
+              $('#loading-screen').hide();
+              $('#loader-text').html('Attempting to Math...');
             }
           }
-        })();
 
-        if ($(window).width() > $(window).height()) {
-          settingsManager.mapHeight = $(window).width(); // Subtract 12 px for the scroll
-          $('#map-image').width(settingsManager.mapHeight);
-          settingsManager.mapHeight = settingsManager.mapHeight * 3 / 4;
-          $('#map-image').height(settingsManager.mapHeight);
-          $('#map-menu').width($(window).width());
-        } else {
-          settingsManager.mapHeight = $(window).height() - 100; // Subtract 12 px for the scroll
-          $('#map-image').height(settingsManager.mapHeight);
-          settingsManager.mapHeight = settingsManager.mapHeight * 4 / 3;
-          $('#map-image').width(settingsManager.mapHeight);
-          $('#map-menu').width($(window).width());
-        }
+          if ($(window).width() > $(window).height()) {
+            settingsManager.mapHeight = $(window).width(); // Subtract 12 px for the scroll
+            $('#map-image').width(settingsManager.mapHeight);
+            settingsManager.mapHeight = settingsManager.mapHeight * 3 / 4;
+            $('#map-image').height(settingsManager.mapHeight);
+            $('#map-menu').width($(window).width());
+          } else {
+            settingsManager.mapHeight = $(window).height() - 100; // Subtract 12 px for the scroll
+            $('#map-image').height(settingsManager.mapHeight);
+            settingsManager.mapHeight = settingsManager.mapHeight * 4 / 3;
+            $('#map-image').width(settingsManager.mapHeight);
+            $('#map-menu').width($(window).width());
+          }
+        }, 1500);
+
       })();
     });
   });
@@ -320,13 +326,6 @@ var drawLoopCallback;
 
   function drawLoop () {
     return;
-
-
-
-    _drawScene();
-    drawLines();
-
-
     if (settingsManager.isDemoModeOn) _demoMode();
 
     // Hide satMiniBoxes When Not in Use
@@ -337,15 +336,7 @@ var drawLoopCallback;
       isSatMiniBoxInUse = false;
     }
 
-    // var bubble = new FOVBubble();
-    // bubble.set();
-    // bubble.draw();    
   }
-
-
-
-
-
   var demoModeSatellite = 0;
   var demoModeLastTime = 0;
   function _demoMode () {
@@ -376,27 +367,10 @@ var drawLoopCallback;
   }
 })();
 
-function _getCamDist () {
-  db.log('_getCamDist', true);
-  return Math.pow(zoomLevel, ZOOM_EXP) * (DIST_MAX - DIST_MIN) + DIST_MIN;
-}
-function _unProject (mx, my) {
-  glScreenX = (mx / gl.drawingBufferWidth * 2) - 1.0;
-  glScreenY = 1.0 - (my / gl.drawingBufferHeight * 2);
-  screenVec = [glScreenX, glScreenY, -0.01, 1.0]; // gl screen coords
-
-  comboPMat = mat4.create();
-  mat4.mul(comboPMat, pMatrix, camMatrix);
-  invMat = mat4.create();
-  mat4.invert(invMat, comboPMat);
-  worldVec = vec4.create();
-  vec4.transformMat4(worldVec, screenVec, invMat);
-
-  return [worldVec[0] / worldVec[3], worldVec[1] / worldVec[3], worldVec[2] / worldVec[3]];
-}
 function getSatIdFromCoord (x, y) {
   canvasManager.renderer.setRenderTarget(canvasManager.pickingTexture);
-  canvasManager.renderer.render(canvasManager.pickingScene, canvasManager.camera);
+  canvasManager.renderer.clear();
+  canvasManager.renderer.render(canvasManager.pickingScene, canvasManager.controls.object);
   canvasManager.renderer.setRenderTarget(null);
   canvasManager.pixelBuffer = new Uint8Array(4);
   canvasManager.renderer.readRenderTargetPixels(
@@ -404,58 +378,11 @@ function getSatIdFromCoord (x, y) {
     1, 1, canvasManager.pixelBuffer );
   return ((canvasManager.pixelBuffer[2] << 16) | (canvasManager.pixelBuffer[1] << 8) | (canvasManager.pixelBuffer[0])) - 1;
 }
-function getCamPos () {
-  gCPr = _getCamDist();
-  gCPz = gCPr * Math.sin(camPitch);
-  gCPrYaw = gCPr * Math.cos(camPitch);
-  gCPx = gCPrYaw * Math.sin(camYaw);
-  gCPy = gCPrYaw * -Math.cos(camYaw);
-  return [gCPx, gCPy, gCPz];
-}
-function longToYaw (long) {
-  var selectedDate = $('#datetime-text').text().substr(0, 19);
-  var today = new Date();
-  var angle = 0;
 
-  selectedDate = selectedDate.split(' ');
-  selectedDate = new Date(selectedDate[0] + 'T' + selectedDate[1] + 'Z');
-  // NOTE: This formula sometimes is incorrect, but has been stable for over a year
-  today.setUTCHours(selectedDate.getUTCHours() + ((selectedDate.getUTCMonth()) * 2) - 10);  // Offset has to account for time of year. Add 2 Hours per month into the year starting at -12.
-
-  today.setUTCMinutes(selectedDate.getUTCMinutes());
-  today.setUTCSeconds(selectedDate.getUTCSeconds());
-  selectedDate.setUTCHours(0);
-  selectedDate.setUTCMinutes(0);
-  selectedDate.setUTCSeconds(0);
-  var longOffset = (((today - selectedDate) / 60 / 60 / 1000)); // In Hours
-  if (longOffset > 24) longOffset = longOffset - 24;
-  longOffset = longOffset * 15; // 15 Degress Per Hour longitude Offset
-
-  angle = (long + longOffset) * DEG2RAD;
-  angle = _normalizeAngle(angle);
-  return angle;
-}
-function latToPitch (lat) {
-  var pitch = lat * DEG2RAD;
-  if (pitch > TAU / 4) pitch = TAU / 4;     // Max 90 Degrees
-  if (pitch < -TAU / 4) pitch = -TAU / 4;   // Min -90 Degrees
-  return pitch;
-}
 function camSnap (pitch, yaw) {
   camPitchTarget = pitch;
   camYawTarget = _normalizeAngle(yaw);
   camSnapMode = true;
-}
-function changeZoom (zoom) {
-  if (zoom === 'geo') {
-    zoomTarget = 0.82;
-    return;
-  }
-  if (zoom === 'leo') {
-    zoomTarget = 0.45;
-    return;
-  }
-  zoomTarget = zoom;
 }
 
 var isSelectedSatNegativeOne = false;
@@ -470,7 +397,6 @@ function selectSat (satId) {
   }
   satSet.selectSat(satId);
   camSnapMode = false;
-  rotateTheEarth = false;
 
   if (satId === -1) {
     if (settingsManager.currentColorScheme === ColorScheme.group || $('#search').val().length >= 3) { // If group selected

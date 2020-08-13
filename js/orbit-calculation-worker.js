@@ -97,9 +97,13 @@ onmessage = function (m) {
         var cosLon = Math.cos((satCache[satId].lonList[x] * DEG2RAD) + gmst);
         var sinLon = Math.sin((satCache[satId].lonList[x] * DEG2RAD) + gmst);
 
-        pointsOut[i * 3] = (RADIUS_OF_EARTH + satCache[satId].altList[x]) * cosLat * cosLon;
-        pointsOut[i * 3 + 1] = (RADIUS_OF_EARTH + satCache[satId].altList[x]) * cosLat * sinLon;
-        pointsOut[i * 3 + 2] = (RADIUS_OF_EARTH + satCache[satId].altList[x]) * sinLat;
+        let outX = ((RADIUS_OF_EARTH + satCache[satId].altList[x]) * cosLat * cosLon).toFixed(2);
+        let outY = ((RADIUS_OF_EARTH + satCache[satId].altList[x]) * cosLat * sinLon).toFixed(2);
+        let outZ = ((RADIUS_OF_EARTH + satCache[satId].altList[x]) * sinLat).toFixed(2);
+
+        pointsOut[i * 3] = (isNaN(outX)) ? 0.0 : outX;
+        pointsOut[i * 3 + 1] = (isNaN(outY)) ? 0.0 : outY;
+        pointsOut[i * 3 + 2] = (isNaN(outZ)) ? 0.0 : outZ;
         i++;
       }
     } else {

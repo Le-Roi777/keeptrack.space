@@ -529,9 +529,9 @@ function propagateCruncher () {
         sinLat = Math.sin(satCache[i].lat * DEG2RAD);
         cosLon = Math.cos((satCache[i].lon * DEG2RAD) + gmst);
         sinLon = Math.sin((satCache[i].lon * DEG2RAD) + gmst);
-        satPos[i * 3] = (6371 + 0.25 + satCache[i].alt) * cosLat * cosLon; // 6371 is radius of earth
-        satPos[i * 3 + 1] = (6371 + 0.25 + satCache[i].alt) * cosLat * sinLon;
-        satPos[i * 3 + 2] = (6371 + 0.25 + satCache[i].alt) * sinLat;
+        satPos[i * 3] = (RADIUS_OF_EARTH + 40.0 + satCache[i].alt) * cosLat * cosLon; // 6371 is radius of earth
+        satPos[i * 3 + 1] = (RADIUS_OF_EARTH + 40.0 + satCache[i].alt) * cosLat * sinLon;
+        satPos[i * 3 + 2] = (RADIUS_OF_EARTH + 40.0 + satCache[i].alt) * sinLat;
       }
 
       satVel[i * 3] = 0;

@@ -1,4 +1,3 @@
-var canvasDOM = $('#keeptrack-canvas');
 var canvasDOM2 = $('#keep3-canvas');
 
 var RADIUS_OF_DRAW_SUN = 6600;
@@ -25,6 +24,23 @@ var isHoverBoxVisible = false;
 var rotateTheEarthSpeed = 0.000075; // Adjust to change camera speed when rotating around earth
 var isShowDistance = true;
 
+var time, drawNow, dt;
+
+// updateHover
+var updateHoverSatId, updateHoverSatPos;
+
+// _unProject variables
+var glScreenX, glScreenY, screenVec, comboPMat, invMat, worldVec, gCPr, gCPz,
+    gCPrYaw, gCPx, gCPy, fpsTimeNow, fpsElapsed, satData, dragTarget;
+
+// drawLoop camera variables
+var xDif, yDif, yawTarget, pitchTarget, dragPointR, dragTargetR, dragPointLon,
+    dragTargetLon, dragPointLat, dragTargetLat, pitchDif, yawDif;
+
+// getEarthScreenPoint
+var rayOrigin, ptThru, rayDir, toCenterVec, dParallel, longDir, dPerp, dSubSurf,
+    dSurf, ptSurf;
+
 earthInfo.earthJ = 0;
 earthInfo.earthEra = 0;
 earthInfo.timeTextStr = '';
@@ -32,274 +48,414 @@ earthInfo.timeTextStrEmpty = '';
 earthInfo.propRateDOM = $('#propRate-status-box');
 
 canvasManager = {};
+canvasManager.isEarthDayLoaded = false;
+canvasManager.isEarthNightLoaded = false;
+canvasManager.isMoonLoaded = false;
+canvasManager.isSunLoaded = false;
 canvasManager.start = () => {
-  canvasManager.addLine = (points) => {
-    for (var i = 0; i < points.length; i++) {
-      canvasManager.lines.push(points[i]);
-    }
-  };
-  canvasManager.initSun = () => {
-    // Sun Object
-    {
-      const radius =  RADIUS_OF_DRAW_SUN;
-      const widthSegments = 32;
-      const heightSegments = 32;
-      const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
-      const color = 0x44aa88;
-      const material = new THREE.MeshBasicMaterial({
-        map: loader.load(settingsManager.installDirectory + 'images/sun-1024.jpg'),
-      });
-
-      const sunObj = new THREE.Mesh(geometry, material);
-      canvasManager.objects.sun = sunObj;
-    }
-    // Sun's Light
-    {
-      const color = 0xFFFFFF;
-      const intensity = 1;
-      // canvasManager.objects.sun.lightEarth = new THREE.DirectionalLight(color, intensity);
-      canvasManager.objects.sun.lightMoon = new THREE.DirectionalLight(color, intensity);
-    }
-  };
-  canvasManager.initEarth = () => {
-    // Make Earth and Black Earth
-    {
-      const radius =  RADIUS_OF_EARTH;
-      const widthSegments = 512;
-      const heightSegments = 512;
-      const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
-
-      let uniforms = {
-        uSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/no_clouds_4096.jpg')},
-        uNightSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/nightearth-4096.png')},
-        uLightDirection: {type: 'vec3', value: earth.lightDirection}
-      };
-
-      sun.currentDirection();
-
-      const fs = `
-          uniform vec3 uLightDirection;
-
-          varying vec2 texCoord;
-          varying vec3 vnormal;
-
-          uniform sampler2D uSampler;
-          uniform sampler2D uNightSampler;
-
-          void main(void) {
-            float directionalLightAmount = max(dot(vnormal, uLightDirection), 0.0);
-            vec3 lightColor = vec3(0.0,0.0,0.0) + (vec3(1.0,1.0,1.0) * directionalLightAmount);
-            vec3 litTexColor = texture2D(uSampler, texCoord).rgb * lightColor * 2.0;
-
-            vec3 nightLightColor = texture2D(uNightSampler, texCoord).rgb * pow(1.0 - directionalLightAmount, 2.0) ;
-
-            gl_FragColor = vec4(litTexColor + nightLightColor, 1.0);
-          }`;
-      const vs = `
-          varying vec2 texCoord;
-          varying vec3 vnormal;
-          varying float directionalLightAmount;
-
-          void main(void) {
-            vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_Position = projectionMatrix * modelViewPosition;
-
-            texCoord = uv;
-            vnormal = normal;
-          }`;
-
-      const material = new THREE.ShaderMaterial({
-        uniforms: uniforms,
-        vertexShader: vs,
-        fragmentShader: fs
-      });
-
-      material.renderOrder = 1;
-
-      const materialBlack = new THREE.MeshBasicMaterial({
-        color: 0x000000
-      });
-
-      let earthObj = new THREE.Mesh(geometry, material);
-      let earthMask = new THREE.Mesh(geometry, materialBlack);
-      canvasManager.objects.earth = earthObj;
-      canvasManager.objects.earthMask = earthMask;
-    }
-    // Make Raycaster for Finding Earth Lat/Lon
-    {
-      canvasManager.raycaster = new THREE.Raycaster();
-    }
-  };
-  canvasManager.initMoon = () => {
-    const radius =  RADIUS_OF_DRAW_MOON;
-    const widthSegments = 64;
-    const heightSegments = 64;
-    const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
-    const material = new THREE.MeshLambertMaterial({
-      map: loader.load(settingsManager.installDirectory + 'images/moon-1024.jpg'),
-    });
-
-    let moon = new THREE.Mesh(geometry, material);
-    canvasManager.objects.moon = moon;
-  };
-  canvasManager.sats = [];
-  canvasManager.initSats = () => {
-    satBuf = new THREE.BufferGeometry();
-    satBuf.boundingBox = null;
-    satBuf.computeBoundingSphere();
-    satBuf.boundingSphere.radius += 10;
-
-    satBuf.setAttribute(
-      'position',
-      new THREE.BufferAttribute(new Float32Array(satPos), 3));
-    satBuf.setAttribute(
-      'colorId',
-      new THREE.BufferAttribute(new Float32Array(pickColorData), 3));
-    satBuf.setAttribute(
-      'isStar',
-      new THREE.BufferAttribute(new Float32Array(starBufData), 1));
-
-    let uniforms = {
-      minSize: {value: 10.0},
-      maxSize: {value: 50.0}
-    };
-
-    let material =  new THREE.ShaderMaterial({
-      uniforms: uniforms,
-      depthWrite: false,
-      // vertexColors: true, - Cant do this AND custom shaders
-      // precision: 'highp',
-      blending: THREE.NormalBlending,
-      fragmentShader: shaderLoader.shaderData[8].code,
-      vertexShader: shaderLoader.shaderData[10].code,
-    });
-    // Disable for debug to see objects real size
-    material.transparent = true;
-    material.renderOrder = 5;
-
-    canvasManager.objects.sats = new THREE.Points(satBuf,material);
-
-    var vs3D = `
-    attribute vec3 colorId;
-    attribute float isStar;
-    attribute float pickable;
-
-    uniform float minSize;
-    uniform float maxSize;
-
-    varying vec3 vcolorId;
-
-    void main(void){
-      vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
-
-      gl_Position = projectionMatrix * modelViewPosition;
-      gl_PointSize = min(max(pow(15000.0 \/ gl_Position.z, 2.1), minSize * isStar), maxSize \/ 2.0) * 1.0 * pickable;
-
-      vcolorId = colorId;
-    }`;
-
-    var fs3D = `
-    varying vec3 vcolorId;
-    void main(void) {
-      gl_FragColor = vec4(vcolorId.rgb,1.0);
-    }`;
-
-    var pickingMaterial = new THREE.ShaderMaterial({
-        uniforms: uniforms,
-        vertexShader: vs3D,
-        fragmentShader: fs3D,
-        transparent: false
-    });
-
-    canvasManager.objects.pickableSats = new THREE.Points(satBuf,pickingMaterial);
-  };
-
   const loader = new THREE.TextureLoader();
-
   function main() {
+    _loadOrbitControls();
     const canvas = document.getElementById('keep3-canvas');
 
-    canvasManager.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      preserveDrawingBuffer: true
-    });
-
-    // picking
-    canvasManager.pickingScene = new THREE.Scene();
-    canvasManager.pickingTexture = new THREE.WebGLRenderTarget(canvas.width, canvas.height);
-    // canvasManager.pickingTexture.texture.minFilter = THREE.LinearFilter;
-
-    canvasManager.resizeCanvas = () => {
-      let dpi;
-      if (typeof settingsManager.dpi != 'undefined') {
-        dpi = settingsManager.dpi;
-      } else {
-        dpi = window.devicePixelRatio;
-      }
-
-      canvasManager.renderer.setPixelRatio( dpi );
-
-      if (settingsManager.screenshotMode) {
-        canvas.width = settingsManager.hiResWidth;
-        canvas.height = settingsManager.hiResHeight;
-      } else {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-
+    // Scene and Camera
+    {
+      canvasManager.fov = 45;
       canvasManager.aspect = canvas.width / canvas.height;  // the canvas default
+      canvasManager.near = 0.1;
+      canvasManager.far = 600000;
       canvasManager.camera = new THREE.PerspectiveCamera(canvasManager.fov, canvasManager.aspect, canvasManager.near, canvasManager.far);
 
-      canvasManager.pickingTexture.width = canvas.width;
-      canvasManager.pickingTexture.height = canvas.height;
+      canvasManager.pickingScene = new THREE.Scene();
+      canvasManager.pickingTexture = new THREE.WebGLRenderTarget(
+        canvas.width,
+        canvas.height,
+        {
+          stencilBuffer: false
+        }
+      );
 
-      canvasManager.renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        preserveDrawingBuffer: true
-      });
-      canvasManager.aspect = canvas.width / canvas.height;
+      canvasManager.scene = new THREE.Scene();
+      canvasManager.effectsScene = new THREE.Scene();
+      // canvasManager.scene.background = new THREE.Color('black');
+
+      canvasManager.resizeCanvas = () => {
+        let dpi;
+        if (typeof settingsManager.dpi != 'undefined') {
+          dpi = settingsManager.dpi;
+        } else {
+          dpi = window.devicePixelRatio;
+        }
+
+
+        if (settingsManager.screenshotMode) {
+          canvas.width = settingsManager.hiResWidth;
+          canvas.height = settingsManager.hiResHeight;
+        } else {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+        }
+
+        canvasManager.aspect = canvas.width / canvas.height;  // the canvas default
+        canvasManager.camera = new THREE.PerspectiveCamera(canvasManager.fov, canvasManager.aspect, canvasManager.near, canvasManager.far);
+
+        canvasManager.pickingTexture.width = canvas.width;
+        canvasManager.pickingTexture.height = canvas.height;
+
+        canvasManager.renderer = new THREE.WebGLRenderer({
+          canvas,
+          antialias: true,
+          // logarithmicDepthBuffer: true,
+          powerPerformance: "high-performance",
+          stencil: false,
+          // depth: false,
+          preserveDrawingBuffer: true
+        });
+
+        canvasManager.renderer.autoClear = false;
+
+        // Composer for Post Processing
+        {
+          // canvasManager.composer = new EffectComposer( canvasManager.renderer );
+          //
+          // // let taaPass = new TAARenderPass( canvasManager.scene, canvasManager.camera );
+          // // taaPass.unbiased = true;
+          // // taaPass.sampleLevel = 2;
+          // // canvasManager.composer.addPass( taaPass );
+          //
+          // let renderPass = new RenderPass( canvasManager.scene, canvasManager.camera );
+          // renderPass.enabled = true;
+          // canvasManager.composer.addPass( renderPass );
+        }
+
+        // canvasManager.renderer.setPixelRatio( dpi );
+        canvasManager.aspect = canvas.width / canvas.height;
+
+        canvasManager.camera.position.z = 44105;
+        canvasManager.camera.position.x = 0;
+        canvasManager.camera.position.y = 0;
+
+        canvasManager.controls = new OrbitControls( canvasManager.camera, canvasManager.renderer.domElement );
+        canvasManager.controls.minDistance = 6800;
+        canvasManager.controls.maxDistance = 60000;
+        canvasManager.controls.zoomSpeed = 0.5;
+        canvasManager.controls.rotateSpeed = 0.025;
+        canvasManager.controls.panSpeed = 0.025;
+        canvasManager.controls.screenSpacePanning = true;
+        canvasManager.controls.autoRotateSpeed = settingsManager.autoRotateSpeed;
+        canvasManager.controls.autoRotate = true;
+        canvasManager.controls.enableDamping = true;
+        canvasManager.controls.dampingFactor = 0.05;
+        canvasManager.controls.update();
+      };
+      canvasManager.resizeCanvas();
+
+      canvasManager.objects = {};
+      canvasManager.objects.ambientLight = new THREE.AmbientLight( 0x555555 ); // soft white light
+    }
+
+    canvasManager.addLine = (points) => {
+      for (var i = 0; i < points.length; i++) {
+        canvasManager.lines.push(points[i]);
+      }
     };
-    canvasManager.resizeCanvas();
+    canvasManager.initSun = () => {
+      // Sun Object
+      {
+        const radius =  RADIUS_OF_DRAW_SUN;
+        const widthSegments = 32;
+        const heightSegments = 32;
+        const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
+        const color = 0x44aa88;
+        const material = new THREE.MeshBasicMaterial({
+          map: loader.load(settingsManager.installDirectory + 'images/sun-1024.jpg',
+          function (image) {
+             canvasManager.isSunLoaded = true;
+          })
+        });
 
-    canvasManager.fov = 75;
-    canvasManager.aspect = canvas.width / canvas.height;  // the canvas default
-    canvasManager.near = 0.1;
-    canvasManager.far = 600000;
-    canvasManager.camera = new THREE.PerspectiveCamera(canvasManager.fov, canvasManager.aspect, canvasManager.near, canvasManager.far);
-    canvasManager.camera.position.z = 20000;
-    canvasManager.camera.position.x = 0;
-    canvasManager.camera.position.y = 0;
+        const sunObj = new THREE.Mesh(geometry, material);
+        canvasManager.objects.sun = sunObj;
+      }
+      // Sun's Light
+      {
+        const color = 0xFFFFFF;
+        const intensity = 1;
+        canvasManager.objects.sun.lightMoon = new THREE.DirectionalLight(color, intensity);
+      }
+    };
+    canvasManager.initEarth = () => {
+      // Make Earth and Black Earth
+      {
+        const radius =  RADIUS_OF_EARTH;
+        const widthSegments = 128;
+        const heightSegments = 128;
+        const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
 
-    canvasManager.scene = new THREE.Scene();
-    canvasManager.scene.background = new THREE.Color('black');
-    // canvasManager.pickingScene.background = new THREE.Color('red');
+        let uniforms = {
+          uSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/no_clouds_4096.jpg',
+          function (image) {
+             canvasManager.isEarthDayLoaded = true;
+          })},
+          uNightSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/nightearth-4096.png',
+          function (image) {
+             canvasManager.isEarthNightLoaded = true;
+          })},
+          // uSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/no_clouds_8k.jpg')},
+          // uNightSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/6_night_16k.jpg')},
+          uLightDirection: {type: 'vec3', value: earth.lightDirection}
+        };
 
-    canvasManager.objects = {};
-    canvasManager.objects.ambientLight = new THREE.AmbientLight( 0x555555 ); // soft white light
+        sun.currentDirection();
+
+        const fs = `
+            uniform vec3 uLightDirection;
+
+            varying vec2 texCoord;
+            varying vec3 vnormal;
+
+            uniform sampler2D uSampler;
+            uniform sampler2D uNightSampler;
+
+            void main(void) {
+              float directionalLightAmount = max(dot(vnormal, uLightDirection), 0.0);
+              vec3 lightColor = vec3(0.0,0.0,0.0) + (vec3(1.0,1.0,1.0) * directionalLightAmount);
+              vec3 litTexColor = texture2D(uSampler, texCoord).rgb * lightColor * 2.0;
+
+              vec3 nightLightColor = texture2D(uNightSampler, texCoord).rgb * pow(1.0 - directionalLightAmount, 2.0) ;
+
+              gl_FragColor = vec4(litTexColor + nightLightColor, 1.0);
+            }`;
+        const vs = `
+            varying vec2 texCoord;
+            varying vec3 vnormal;
+            varying float directionalLightAmount;
+
+            void main(void) {
+              vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_Position = projectionMatrix * modelViewPosition;
+
+              texCoord = uv;
+              vnormal = normal;
+            }`;
+
+        const material = new THREE.ShaderMaterial({
+          uniforms: uniforms,
+          vertexShader: vs,
+          fragmentShader: fs,
+        });
+
+        const materialBlack = new THREE.MeshBasicMaterial({
+          color: 0x000000
+        });
+
+        let earthObj = new THREE.Mesh(geometry, material);
+        let earthMask = new THREE.Mesh(geometry, materialBlack);
+        canvasManager.objects.earth = earthObj;
+        canvasManager.objects.earthMask = earthMask;
+      }
+      // Make Raycaster for Finding Earth Lat/Lon
+      {
+        canvasManager.raycaster = new THREE.Raycaster();
+      }
+    };
+    canvasManager.initMoon = () => {
+      const radius =  RADIUS_OF_DRAW_MOON;
+      const widthSegments = 64;
+      const heightSegments = 64;
+      const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
+      const material = new THREE.MeshLambertMaterial({
+        map: loader.load(
+          settingsManager.installDirectory + 'images/moon-1024.jpg',
+          function (image) {
+             canvasManager.isMoonLoaded = true;
+          })
+      });
+
+      let moon = new THREE.Mesh(geometry, material);
+      canvasManager.objects.moon = moon;
+    };
+    canvasManager.initSats = () => {
+      satBuf = new THREE.BufferGeometry();
+
+      satBuf.setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array(satPos), 3));
+      satBuf.setAttribute(
+        'colorId',
+        new THREE.BufferAttribute(new Float32Array(pickColorData), 3));
+      satBuf.setAttribute(
+        'isStar',
+        new THREE.BufferAttribute(new Float32Array(starBufData), 1));
+
+      let uniforms = {
+        minSize: {value: 9.0},
+        maxSize: {value: 80.0}
+      };
+
+      const fs = `
+        precision mediump float;
+
+        varying vec4 vColor;
+
+        void main(void) {
+          vec2 ptCoord = gl_PointCoord * 2.0 - vec2(1.0, 1.0);
+          float r = 0.43 - min(abs(length(ptCoord)), 1.0);
+          float alpha = pow(2.0 * r + 0.5, 3.0);
+          alpha = min(alpha, 1.0);
+          gl_FragColor = vec4(vColor.rgb,vColor.a * alpha);
+        }
+      `;
+
+      const vs = `
+        attribute vec4 color;
+        attribute float isStar;
+
+        uniform float minSize;
+        uniform float maxSize;
+
+        varying vec4 vColor;
+
+        void main(void) {
+          vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * modelViewPosition;
+
+          gl_PointSize = min(max(pow(15000.0 \/ gl_Position.z, 2.1), minSize * isStar), maxSize) * 1.0;
+          vColor = color;
+        }
+      `;
+
+      let material =  new THREE.ShaderMaterial({
+        uniforms: uniforms,
+        depthWrite: false,
+        // vertexColors: true, - Cant do this AND custom shaders
+        // precision: 'highp',
+        blending: THREE.NormalBlending,
+        fragmentShader: fs,
+        vertexShader: vs,
+        polygonOffset: true,
+        polygonOffsetFactor: -1.0,
+        polygonOffsetUnits: 1.0,
+      });
+      // Disable for debug to see objects real size
+      material.transparent = true;
+
+      canvasManager.objects.sats = new THREE.Points(satBuf,material);
+
+      var vs3D = `
+      attribute vec3 colorId;
+      attribute float isStar;
+      attribute float pickable;
+
+      uniform float minSize;
+      uniform float maxSize;
+
+      varying vec3 vcolorId;
+
+      void main(void){
+        vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+
+        gl_Position = projectionMatrix * modelViewPosition;
+        gl_PointSize = min(max(pow(15000.0 \/ gl_Position.z, 2.1), minSize * isStar), maxSize \/ 2.0) * 1.0 * pickable;
+
+        vcolorId = colorId;
+      }`;
+
+      var fs3D = `
+      varying vec3 vcolorId;
+      void main(void) {
+        gl_FragColor = vec4(vcolorId.rgb,1.0);
+      }`;
+
+      var pickingMaterial = new THREE.ShaderMaterial({
+          uniforms: uniforms,
+          vertexShader: vs3D,
+          fragmentShader: fs3D,
+          transparent: false
+      });
+
+      canvasManager.objects.pickableSats = new THREE.Points(satBuf,pickingMaterial);
+    };
+    canvasManager.initAtmosphere = () => {
+      const vs = `
+        varying vec3 vNormal;
+        void main () {
+           vNormal     = normalize( normalMatrix * normal );
+           gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }`;
+
+      const fs = `
+        uniform float coeficient;
+        uniform float power;
+        uniform vec3  glowColor;
+
+        varying vec3  vNormal;
+
+        void main () {
+           float intensity = pow( coeficient - dot(vNormal, vec3(0.0, 0.0, 1.0)), power );
+           gl_FragColor    = vec4( glowColor * intensity, 1.0 );
+        }`;
+
+      var material    = new THREE.ShaderMaterial({
+        uniforms: {
+            coeficient  : {
+                type    : "f",
+                value   : 1.0
+            },
+            power       : {
+                type    : "f",
+                value   : 2.0
+            },
+            glowColor   : {
+                type    : "c",
+                value   : new THREE.Color('blue')
+            },
+        },
+        vertexShader    : vs,
+        fragmentShader  : fs,
+        // side        : THREE.FrontSide,
+        blending    : THREE.NormalBlending,
+        transparent : true,
+        side: THREE.BackSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 10.0,
+        polygonOffsetUnits: 1.0,
+        depthWrite  : false,
+      });
+
+      const radius =  RADIUS_OF_EARTH + 250;
+      const widthSegments = 64;
+      const heightSegments = 64;
+      const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
+      material.uniforms.glowColor.value.set(0x00b3ff);
+      material.uniforms.coeficient.value  = 0.8;
+      material.uniforms.power.value       = 4.0;
+      let atmosphere = new THREE.Mesh(geometry, material);
+      canvasManager.objects.atmosphere = atmosphere;
+    };
 
     canvasManager.initEarth();
+    canvasManager.initAtmosphere();
     canvasManager.initMoon();
     canvasManager.initSun();
     canvasManager.initSats();
 
-    var time, drawNow, dt;
-
-    // updateHover
-    var updateHoverSatId, updateHoverSatPos;
-
-    // _unProject variables
-    var glScreenX, glScreenY, screenVec, comboPMat, invMat, worldVec, gCPr, gCPz,
-        gCPrYaw, gCPx, gCPy, fpsTimeNow, fpsElapsed, satData, dragTarget;
-
-    // drawLoop camera variables
-    var xDif, yDif, yawTarget, pitchTarget, dragPointR, dragTargetR, dragPointLon,
-        dragTargetLon, dragPointLat, dragTargetLat, pitchDif, yawDif;
-
-    // getEarthScreenPoint
-    var rayOrigin, ptThru, rayDir, toCenterVec, dParallel, longDir, dPerp, dSubSurf,
-        dSurf, ptSurf;
+    canvasManager.cameraManager = {};
+    canvasManager.cameraManager.targetPosition = canvasManager.camera.position;
+    canvasManager.cameraManager.moveSpeed = 20.00;
+    canvasManager.cameraManager.rotateSpeed = 0.00005;
+    canvasManager.cameraManager.zoomSpeed = 75.0;
+    canvasManager.cameraManager.dampingFactor = 0.05;
+    canvasManager.cameraManager.directionVector = new THREE.Vector3();
+    canvasManager.cameraManager.selectedSatVec3 = new THREE.Vector3(0,0,0);
+    canvasManager.cameraManager.zoomFactor0 = 800;
+    canvasManager.cameraManager.zoomFactor = canvasManager.cameraManager.zoomFactor;
+    canvasManager.cameraManager.targetAzimuthAngle = null;
+    canvasManager.cameraManager.targetPolarAngle = null;
+    canvasManager.cameraManager.targetZoom = null;
+    canvasManager.cameraManager.getDistanceFrom0 = () => {
+      return canvasManager.camera.position.distanceTo({x:0,y:0,z:0});
+    };
 
     function render(renderTime) {
       // Setup Time
@@ -342,112 +498,6 @@ canvasManager.start = () => {
 
       // Setup Camera Pitch/yaw
       {
-        if ((isDragging && !settingsManager.isMobileModeEnabled) ||
-             isDragging && settingsManager.isMobileModeEnabled && (mouseX !== 0 || mouseY !== 0)) {
-          // Raycasting on the Earth Disabled - Feels Faster
-          {
-            // dragTarget = getEarthScreenPoint(mouseX, mouseY);
-            // if (typeof dragPoint == 'undefined' || typeof dragTarget == 'undefined' ||
-            //     typeof dragTarget.uv.x == 'undefined' || typeof dragTarget.uv.y == 'undefined' ||
-            //     typeof dragPoint.uv.x == 'undefined' || typeof dragPoint.uv.y == 'undefined' ||
-            // cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY ||
-            // settingsManager.isMobileModeEnabled) { // random screen drag
-            //   xDif = screenDragPoint[0] - mouseX;
-            //   yDif = screenDragPoint[1] - mouseY;
-            //   yawTarget = dragStartYaw + xDif * settingsManager.cameraMovementSpeed;
-            //   pitchTarget = dragStartPitch + yDif * -settingsManager.cameraMovementSpeed;
-            //   camPitchSpeed = _normalizeAngle(camPitch - pitchTarget) * -settingsManager.cameraMovementSpeed;
-            //   camYawSpeed = _normalizeAngle(camYaw - yawTarget) * -settingsManager.cameraMovementSpeed;
-            // } else {  // earth surface point drag
-            //   pitchDif = dragPoint.uv.y - dragTarget.uv.y;
-            //   yawDif = _normalizeAngle(dragPoint.uv.x - dragTarget.uv.x);
-            //   camPitchSpeed = pitchDif * settingsManager.cameraMovementSpeed;
-            //   camYawSpeed = yawDif * settingsManager.cameraMovementSpeed;
-            // }
-          }
-
-          xDif = screenDragPoint[0] - mouseX;
-          yDif = screenDragPoint[1] - mouseY;
-          yawTarget = dragStartYaw + xDif * settingsManager.cameraMovementSpeed;
-          pitchTarget = dragStartPitch + yDif * -settingsManager.cameraMovementSpeed;
-          camPitchSpeed = _normalizeAngle(camPitch - pitchTarget) * -settingsManager.cameraMovementSpeed;
-          camYawSpeed = _normalizeAngle(camYaw - yawTarget) * -settingsManager.cameraMovementSpeed;
-
-          camSnapMode = false;
-        } else {
-          // DESKTOP ONLY
-          if (!settingsManager.isMobileModeEnabled) {
-            camPitchSpeed -= (camPitchSpeed * dt * settingsManager.cameraMovementSpeed); // decay speeds when globe is "thrown"
-            camYawSpeed -= (camYawSpeed * dt * settingsManager.cameraMovementSpeed);
-          } else if (settingsManager.isMobileModeEnabled) { // MOBILE
-            camPitchSpeed -= (camPitchSpeed * dt * settingsManager.cameraMovementSpeed * 5); // decay speeds when globe is "thrown"
-            camYawSpeed -= (camYawSpeed * dt * settingsManager.cameraMovementSpeed  * 5);
-          }
-        }
-
-        camRotateSpeed -= (camRotateSpeed * dt * settingsManager.cameraMovementSpeed);
-
-        if (cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY) {
-
-          fpsPitch -= 20 * camPitchSpeed * dt;
-          fpsYaw -= 20 * camYawSpeed * dt;
-          fpsRotate -= 20 * camRotateSpeed * dt;
-
-          // Prevent Over Rotation
-          if (fpsPitch > 90) fpsPitch = 90;
-          if (fpsPitch < -90) fpsPitch = -90;
-          // ASTRONOMY 180 FOV Bubble Looking out from Sensor
-          if (cameraType.current=== cameraType.ASTRONOMY) {
-            if (fpsRotate > 90) fpsRotate = 90;
-            if (fpsRotate < -90) fpsRotate = -90;
-          } else {
-            if (fpsRotate > 360) fpsRotate -= 360;
-            if (fpsRotate < 0) fpsRotate += 360;
-          }
-          if (fpsYaw > 360) fpsYaw -= 360;
-          if (fpsYaw < 0) fpsYaw += 360;
-        } else {
-          camPitch += camPitchSpeed * dt;
-          camYaw += camYawSpeed * dt;
-          fpsRotate += camRotateSpeed * dt;
-        }
-
-        if (rotateTheEarth) { camYaw -= rotateTheEarthSpeed * dt; }
-
-        // Zoom Changing
-        if (zoomLevel !== zoomTarget) {
-          if (zoomLevel > settingsManager.satShader.largeObjectMaxZoom) {
-            settingsManager.satShader.maxSize = settingsManager.satShader.maxAllowedSize * 2;
-          } else if (zoomLevel < settingsManager.satShader.largeObjectMinZoom) {
-            settingsManager.satShader.maxSize = settingsManager.satShader.maxAllowedSize / 2;
-          } else {
-            settingsManager.satShader.maxSize = settingsManager.satShader.maxAllowedSize;
-          }
-          // atmosphere.resize();
-        }
-
-        if (camSnapMode) {
-          camPitch += (camPitchTarget - camPitch) * 0.003 * dt;
-
-          let yawErr = _normalizeAngle(camYawTarget - camYaw);
-          camYaw += yawErr * 0.003 * dt;
-
-          zoomLevel = zoomLevel + (zoomTarget - zoomLevel) * dt * 0.0025;
-        } else {
-          if (isZoomIn) {
-            zoomLevel -= zoomLevel * dt / 100 * Math.abs(zoomTarget - zoomLevel);
-          } else {
-            zoomLevel += zoomLevel * dt / 100 * Math.abs(zoomTarget - zoomLevel);
-          }
-          if ((zoomLevel >= zoomTarget && !isZoomIn) ||
-              (zoomLevel <= zoomTarget && isZoomIn)) {
-            zoomLevel = zoomTarget;
-          }
-        }
-
-        if (camPitch > TAU / 4) camPitch = TAU / 4;
-        if (camPitch < -TAU / 4) camPitch = -TAU / 4;
-        camYaw = _normalizeAngle(camYaw);
         if (selectedSat !== -1) {
           let sat = satSet.getSat(selectedSat);
           if (!sat.static) {
@@ -456,8 +506,6 @@ canvasManager.start = () => {
           if (sat.static && cameraType.current=== cameraType.PLANETARIUM) {
             // _camSnapToSat(selectedSat);
           }
-          // var satposition = [sat.position.x, sat.position.y, sat.position.z];
-          // debugLine.set(satposition, [0, 0, 0]);
         }
 
         if (typeof missileManager != 'undefined' && missileManager.missileArray.length > 0) {
@@ -473,6 +521,7 @@ canvasManager.start = () => {
       _drawSun();
       _drawSat(drawNow);
 
+
       _updateHover();
       orbitDisplay.glBuffers.traverseVisible(function(child) {
          if (child.type !== 'Group') {
@@ -481,14 +530,81 @@ canvasManager.start = () => {
       });
       orbitDisplay.draw();
 
-      canvasManager.camera.position.z =_getCamDist();
 
-      canvasManager.scene.rotation.x = camPitch;
-      canvasManager.scene.rotation.y = -camYaw - earthInfo.earthEra;
+      if (canvasManager.cameraManager.targetPosition !== null) {
+        if (canvasManager.controls.object.position.manhattanDistanceTo(canvasManager.cameraManager.targetPosition) > 100 ) {
+          canvasManager.cameraManager.directionVector.subVectors( canvasManager.cameraManager.targetPosition, canvasManager.controls.object.position).normalize();
+          canvasManager.controls.object.position.addScaledVector(canvasManager.cameraManager.directionVector,canvasManager.cameraManager.moveSpeed * dt);
+          canvasManager.camera.lookAt(0,0,0);
+          if (canvasManager.controls.object.position.x > canvasManager.cameraManager.targetPosition.x - 100 &&
+            canvasManager.controls.object.position.x < canvasManager.cameraManager.targetPosition.x + 100 &&
+            canvasManager.controls.object.position.y > canvasManager.cameraManager.targetPosition.y - 100 &&
+            canvasManager.controls.object.position.y < canvasManager.cameraManager.targetPosition.y + 100 &&
+            canvasManager.controls.object.position.z > canvasManager.cameraManager.targetPosition.z - 100 &&
+            canvasManager.controls.object.position.z < canvasManager.cameraManager.targetPosition.z + 100 )
+            {
+              canvasManager.controls.object.position.x = canvasManager.cameraManager.targetPosition.x;
+              canvasManager.controls.object.position.y = canvasManager.cameraManager.targetPosition.y;
+              canvasManager.controls.object.position.z = canvasManager.cameraManager.targetPosition.z;
+              canvasManager.controls.object.position.round();
+              canvasManager.cameraManager.targetPosition = null;
+            }
+          }
+      }
 
-      canvasManager.pickingScene.rotation.x = camPitch;
-      canvasManager.pickingScene.rotation.y = -camYaw - earthInfo.earthEra;
+      if (canvasManager.cameraManager.targetAzimuthAngle !== null) {
+        canvasManager.cameraManager.targetAzimuthAngle = (canvasManager.cameraManager.targetAzimuthAngle > 180 * DEG2RAD) ? canvasManager.cameraManager.targetAzimuthAngle % 360 * DEG2RAD : canvasManager.cameraManager.targetAzimuthAngle;
+        canvasManager.cameraManager.targetAzimuthAngle = (canvasManager.cameraManager.targetAzimuthAngle < -180 * DEG2RAD) ? canvasManager.cameraManager.targetAzimuthAngle % 360 * DEG2RAD : canvasManager.cameraManager.targetAzimuthAngle;
+        if (canvasManager.controls.getAzimuthalAngle() > canvasManager.cameraManager.targetAzimuthAngle) {
+          canvasManager.controls.rotateLeft(canvasManager.cameraManager.rotateSpeed * dt);
+        } else {
+          canvasManager.controls.rotateLeft(-canvasManager.cameraManager.rotateSpeed * dt);
+        }
+        if (canvasManager.controls.getAzimuthalAngle() <= canvasManager.cameraManager.targetAzimuthAngle + 0.02 &&
+            canvasManager.controls.getAzimuthalAngle() >= canvasManager.cameraManager.targetAzimuthAngle - 0.02) {
+              canvasManager.controls.setThetaOverride(canvasManager.cameraManager.targetAzimuthAngle);
+              canvasManager.cameraManager.targetAzimuthAngle = null;
+            }
+      }
 
+      if (canvasManager.cameraManager.targetPolarAngle !== null) {
+        canvasManager.cameraManager.targetPolarAngle = (canvasManager.cameraManager.targetPolarAngle > 180 * DEG2RAD) ? canvasManager.cameraManager.targetPolarAngle % 180 * DEG2RAD : canvasManager.cameraManager.targetPolarAngle;
+        canvasManager.cameraManager.targetPolarAngle = (canvasManager.cameraManager.targetPolarAngle < -180 * DEG2RAD) ? canvasManager.cameraManager.targetPolarAngle % 180 * DEG2RAD : canvasManager.cameraManager.targetPolarAngle;
+        if (canvasManager.controls.getPolarAngle() > canvasManager.cameraManager.targetPolarAngle) {
+          canvasManager.controls.rotateUp(canvasManager.cameraManager.rotateSpeed  * dt);
+        } else {
+          canvasManager.controls.rotateUp(-canvasManager.cameraManager.rotateSpeed * dt);
+        }
+        if (canvasManager.controls.getPolarAngle() <= canvasManager.cameraManager.targetPolarAngle + 0.02 &&
+            canvasManager.controls.getPolarAngle() >= canvasManager.cameraManager.targetPolarAngle - 0.02) {
+              canvasManager.controls.setPhiOverride(canvasManager.cameraManager.targetPolarAngle);
+              canvasManager.cameraManager.targetPolarAngle = null;
+            }
+      }
+
+      if (canvasManager.cameraManager.targetZoom !== null) {
+        if (canvasManager.cameraManager.getDistanceFrom0() < canvasManager.cameraManager.targetZoom - 30 ||
+            canvasManager.cameraManager.getDistanceFrom0() > canvasManager.cameraManager.targetZoom + 30) {
+          canvasManager.controls.object.translateZ(
+            Math.min(canvasManager.cameraManager.zoomSpeed,
+              Math.max(-canvasManager.cameraManager.zoomSpeed,
+                (canvasManager.cameraManager.getDistanceFrom0() - canvasManager.cameraManager.targetZoom) *
+                -1.0 * dt
+              )
+            )
+          );
+        } else {
+          canvasManager.cameraManager.targetZoom = null;
+        }
+      }
+
+      canvasManager.controls.update();
+      // _drawCamera();
+
+      // canvasManager.composer.render();
+      canvasManager.renderer.clear();
+      canvasManager.renderer.render(canvasManager.effectsScene, canvasManager.camera);
+      canvasManager.renderer.clearDepth();
       canvasManager.renderer.render(canvasManager.scene, canvasManager.camera);
       // Debug See id encoding
       // canvasManager.renderer.render(canvasManager.pickingScene, canvasManager.camera);
@@ -505,17 +621,22 @@ canvasManager.start = () => {
     canvasManager.objects.earth.add(canvasManager.objects.sun);
     canvasManager.objects.earth.add(canvasManager.objects.sun.lightMoon.target);
     canvasManager.objects.earth.add(canvasManager.objects.moon);
+    // canvasManager.objects.earth.add(canvasManager.objects.atmosphere);
     canvasManager.scene.add(canvasManager.objects.earth);
     canvasManager.scene.add(canvasManager.objects.sats);
 
+    canvasManager.effectsScene.add(canvasManager.objects.ambientLight);
+    canvasManager.effectsScene.add(canvasManager.objects.atmosphere);
+
     canvasManager.pickingScene.add(canvasManager.objects.earthMask);
     canvasManager.pickingScene.add(canvasManager.objects.pickableSats);
+
+    satSet.setColorScheme(ColorScheme.default, true);
 
 
     // canvasManager.addLine([[{x:0,y:0,z:0},{x:10000,y:0,z:0}]]);
     // canvasManager.addLine([[{x:0,y:0,z:0},{x:0,y:10000,z:0}]]);
     // canvasManager.addLine([[{x:0,y:0,z:0},{x:0,y:0,z:10000}]]);
-
   }
 
   main();
@@ -697,45 +818,12 @@ canvasManager.start = () => {
 };
 window.canvasManager = canvasManager;
 
-function _drawScene () {
-  if (cameraType.current=== cameraType.FPS || cameraType.current=== cameraType.SATELLITE || cameraType.current=== cameraType.ASTRONOMY) {
-    _fpsMovement();
-  }
-  camMatrix = _drawCamera();
-
-  gl.useProgram(gl.pickShaderProgram);
-  gl.uniformMatrix4fv(gl.pickShaderProgram.uPMatrix, false, pMatrix);
-  gl.uniformMatrix4fv(gl.pickShaderProgram.camMatrix, false, camMatrix);
-
-  // Why do we clear the color buffer twice?
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  // sun.draw(pMatrix, camMatrix);
-  // moon.draw(pMatrix, camMatrix);
-  // if (typeof debugLine != 'undefined') debugLine.draw();
-  // if (cameraType.current != cameraType.FPS) {
-  //   atmosphere.draw(pMatrix, camMatrix);
-  // }
-  // earth.draw(pMatrix, camMatrix);
-  // satSet.draw(pMatrix, camMatrix, drawNow);
-  // orbitDisplay.draw(pMatrix, camMatrix);
-
-  /* DEBUG - show the pickbuffer on a canvas */
-  // debugImageData.data = pickColorMap;
-  /* debugImageData.data.set(pickColorMap);
-  debugContext.putImageData(debugImageData, 0, 0); */
-
+function _getCamDist () {
+  db.log('_getCamDist', true);
+  return Math.pow(zoomLevel, ZOOM_EXP) * (DIST_MAX - DIST_MIN) + DIST_MIN;
 }
+
 function _drawCamera () {
-    camMatrix = camMatrixEmpty;
-    mat4.identity(camMatrix);
-
-    /**
-    * For FPS style movement rotate the camera and then translate it
-    * for traditional view, move the camera and then rotate it
-    */
-
    if (isNaN(camPitch) || isNaN(camYaw) || isNaN(camPitchTarget) || isNaN(camYawTarget) || isNaN(zoomLevel) || isNaN(zoomTarget)) {
      try {
        console.group('Camera Math Error');
@@ -758,101 +846,177 @@ function _drawCamera () {
      zoomTarget = 0.5;
    }
 
-    switch (cameraType.current) {
-      case cameraType.DEFAULT: // pivot around the earth with earth in the center
-        mat4.translate(camMatrix, camMatrix, [0, _getCamDist(), 0]);
-        mat4.rotateX(camMatrix, camMatrix, camPitch);
-        mat4.rotateZ(camMatrix, camMatrix, -camYaw);
+  switch (cameraType.current) {
+    case cameraType.DEFAULT: // pivot around the earth with earth in the center
+      // canvasManager.scene.rotation.x = camPitch;
+      // canvasManager.scene.rotation.y = -camYaw - earthInfo.earthEra;
+      //
+      // canvasManager.pickingScene.rotation.x = camPitch;
+      // canvasManager.pickingScene.rotation.y = -camYaw - earthInfo.earthEra;
+
+      // let dist = _getCamDist();
+      // canvasManager.camera.position.x = dist * Math.cos(-camPitch) * Math.cos(-camYaw);
+      // canvasManager.camera.position.y = dist * Math.sin(-camPitch) * Math.cos(-camYaw);
+      // canvasManager.camera.position.z = dist * Math.sin(-camYaw);
+      // canvasManager.camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+      canvasManager.scene.rotation.y = -earthInfo.earthEra;
+      canvasManager.pickingScene.rotation.y = -earthInfo.earthEra;
+
+      break;
+    case cameraType.OFFSET: // pivot around the earth with earth offset to the bottom right
+      canvasManager.scene.rotation.x = camPitch;
+      canvasManager.scene.rotation.y = -camYaw - earthInfo.earthEra;
+
+      canvasManager.pickingScene.rotation.x = camPitch;
+      canvasManager.pickingScene.rotation.y = -camYaw - earthInfo.earthEra;
+      break;
+    case cameraType.FPS: // FPS style movement
+      canvasManager.emptyEuler.setFromQuaternion( canvasManager.camera.quaternion );
+
+  		canvasManager.emptyEuler.y = -fpsYaw;
+  		canvasManager.emptyEuler.x = fpsPitch;
+
+  		canvasManager.emptyEuler.x = Math.max(
+        Math.PI / 2 - Math.PI,
+        Math.min( Math.PI / 2 - 0, canvasManager.emptyEuler.x )
+      );
+  		canvasManager.camera.quaternion.setFromEuler( canvasManager.emptyEuler );
+
+      canvasManager.scene.rotation.y = -earthInfo.earthEra;
+      canvasManager.pickingScene.rotation.y = -earthInfo.earthEra;
+      break;
+    case cameraType.PLANETARIUM: // pivot around the earth looking away from the earth
+      {
+        let satPos = _calculateSensorPos({});
+
+        // Pitch is the opposite of the angle to the latitude
+        // Yaw is 90 degrees to the left of the angle to the longitude
+        pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
+        yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
+        mat4.rotate(camMatrix, camMatrix, pitchRotate, [1, 0, 0]);
+        mat4.rotate(camMatrix, camMatrix, yawRotate, [0, 0, 1]);
+
+        mat4.translate(camMatrix, camMatrix, [-satPos.x, -satPos.y, -satPos.z]);
+
+        _showOrbitsAbove();
+
         break;
-      case cameraType.OFFSET: // pivot around the earth with earth offset to the bottom right
-        mat4.translate(camMatrix, camMatrix, [15000, _getCamDist(), -6000]);
-        mat4.rotateX(camMatrix, camMatrix, camPitch);
-        mat4.rotateZ(camMatrix, camMatrix, -camYaw);
+      }
+    case cameraType.SATELLITE:
+      {
+        orbitDisplay.updateOrbitBuffer(lastSelectedSat);
+
+        let sat = satSet.getSat(selectedSat);
+        let satVec = new THREE.Vector3(sat.position.x, sat.position.y, sat.position.z);
+        // satVec.applyAxisAngle(new THREE.Vector3(1.0,0.0,0.0), -90 * DEG2RAD);
+        // satVec.applyAxisAngle(new THREE.Vector3(0.0,1.0,0.0), -earthInfo.earthEra);
+
+        canvasManager.camera.position.x = satVec.x;
+        canvasManager.camera.position.y = satVec.y;
+        canvasManager.camera.position.z = satVec.z;
+
+        // canvasManager.camera.rotateOnWorldAxis(new THREE.Vector3(0.0,1.0,0.0), earthInfo.earthEra);
+
+        canvasManager.emptyEuler.setFromQuaternion( canvasManager.camera.quaternion );
+
+    		canvasManager.emptyEuler.y = -fpsYaw;
+    		canvasManager.emptyEuler.x = fpsPitch;
+
+    		canvasManager.emptyEuler.x = Math.max(
+          Math.PI / 2 - Math.PI,
+          Math.min( Math.PI / 2 - 0, canvasManager.emptyEuler.x )
+        );
+    		canvasManager.camera.quaternion.setFromEuler( canvasManager.emptyEuler );
+
+        canvasManager.scene.rotation.y = -earthInfo.earthEra;
+        canvasManager.pickingScene.rotation.y = -earthInfo.earthEra;
+
         break;
-      case cameraType.FPS: // FPS style movement
-        mat4.rotate(camMatrix, camMatrix, -fpsPitch * DEG2RAD, [1, 0, 0]);
-        mat4.rotate(camMatrix, camMatrix, fpsYaw * DEG2RAD, [0, 0, 1]);
-        mat4.translate(camMatrix, camMatrix, [fpsXPos, fpsYPos, -fpsZPos]);
+      }
+    case cameraType.ASTRONOMY:
+      {
+        let satPos = _calculateSensorPos({});
+
+        // Pitch is the opposite of the angle to the latitude
+        // Yaw is 90 degrees to the left of the angle to the longitude
+        pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
+        yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
+
+        // TODO: Calculate elevation for cameraType.ASTRONOMY
+        // Idealy the astronomy view would feel more natural and tell you what
+        // az/el you are currently looking at.
+
+        // fpsEl = ((fpsPitch + 90) > 90) ? (-(fpsPitch) + 90) : (fpsPitch + 90);
+        // $('#el-text').html(' EL: ' + fpsEl.toFixed(2) + ' deg');
+
+        // yawRotate = ((-90 - sensorManager.currentSensor.long) * DEG2RAD);
+        let sensor = null;
+        if (typeof sensorManager.currentSensor.name == 'undefined') {
+          sensor = satSet.getIdFromSensorName(sensorManager.currentSensor.name);
+          if (sensor == null) return;
+        } else {
+          sensor = satSet.getSat(satSet.getIdFromSensorName(sensorManager.currentSensor.name));
+        }
+        // mat4.rotate(camMatrix, camMatrix, sat.inclination * DEG2RAD, [0, 1, 0]);
+        mat4.rotate(camMatrix, camMatrix, (pitchRotate + (-fpsPitch * DEG2RAD)), [1, 0, 0]);
+        mat4.rotate(camMatrix, camMatrix, (yawRotate + (fpsYaw * DEG2RAD)), [0, 0, 1]);
+        mat4.rotate(camMatrix, camMatrix, fpsRotate * DEG2RAD, [0, 1, 0]);
+
+        // orbitDisplay.updateOrbitBuffer(lastSelectedSat);
+        let sensorPos = sensor.position;
+        fpsXPos = sensorPos.x;
+        fpsYPos = sensorPos.y;
+        fpsZPos = sensorPos.z;
+        mat4.translate(camMatrix, camMatrix, [-sensorPos.x * 1.01, -sensorPos.y * 1.01, -sensorPos.z * 1.01]); // Scale to get away from Earth
+
+        _showOrbitsAbove(); // Clears Orbit
         break;
-      case cameraType.PLANETARIUM: // pivot around the earth looking away from the earth
-        {
-          let satPos = _calculateSensorPos({});
-
-          // Pitch is the opposite of the angle to the latitude
-          // Yaw is 90 degrees to the left of the angle to the longitude
-          pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
-          yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
-          mat4.rotate(camMatrix, camMatrix, pitchRotate, [1, 0, 0]);
-          mat4.rotate(camMatrix, camMatrix, yawRotate, [0, 0, 1]);
-
-          mat4.translate(camMatrix, camMatrix, [-satPos.x, -satPos.y, -satPos.z]);
-
-          _showOrbitsAbove();
-
-          break;
-        }
-      case cameraType.SATELLITE:
-        {
-          // yawRotate = ((-90 - sensorManager.currentSensor.long) * DEG2RAD);
-          if (selectedSat !== -1) lastSelectedSat = selectedSat;
-          let sat = satSet.getSat(lastSelectedSat);
-          // mat4.rotate(camMatrix, camMatrix, sat.inclination * DEG2RAD, [0, 1, 0]);
-          mat4.rotate(camMatrix, camMatrix, -fpsPitch * DEG2RAD, [1, 0, 0]);
-          mat4.rotate(camMatrix, camMatrix, fpsYaw * DEG2RAD, [0, 0, 1]);
-          mat4.rotate(camMatrix, camMatrix, fpsRotate * DEG2RAD, [0, 1, 0]);
-
-          orbitDisplay.updateOrbitBuffer(lastSelectedSat);
-          let satPos = sat.position;
-          mat4.translate(camMatrix, camMatrix, [-satPos.x, -satPos.y, -satPos.z]);
-          break;
-        }
-      case cameraType.ASTRONOMY:
-        {
-          let satPos = _calculateSensorPos({});
-
-          // Pitch is the opposite of the angle to the latitude
-          // Yaw is 90 degrees to the left of the angle to the longitude
-          pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
-          yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
-
-          // TODO: Calculate elevation for cameraType.ASTRONOMY
-          // Idealy the astronomy view would feel more natural and tell you what
-          // az/el you are currently looking at.
-
-          // fpsEl = ((fpsPitch + 90) > 90) ? (-(fpsPitch) + 90) : (fpsPitch + 90);
-          // $('#el-text').html(' EL: ' + fpsEl.toFixed(2) + ' deg');
-
-          // yawRotate = ((-90 - sensorManager.currentSensor.long) * DEG2RAD);
-          let sensor = null;
-          if (typeof sensorManager.currentSensor.name == 'undefined') {
-            sensor = satSet.getIdFromSensorName(sensorManager.currentSensor.name);
-            if (sensor == null) return;
-          } else {
-            sensor = satSet.getSat(satSet.getIdFromSensorName(sensorManager.currentSensor.name));
-          }
-          // mat4.rotate(camMatrix, camMatrix, sat.inclination * DEG2RAD, [0, 1, 0]);
-          mat4.rotate(camMatrix, camMatrix, (pitchRotate + (-fpsPitch * DEG2RAD)), [1, 0, 0]);
-          mat4.rotate(camMatrix, camMatrix, (yawRotate + (fpsYaw * DEG2RAD)), [0, 0, 1]);
-          mat4.rotate(camMatrix, camMatrix, fpsRotate * DEG2RAD, [0, 1, 0]);
-
-          // orbitDisplay.updateOrbitBuffer(lastSelectedSat);
-          let sensorPos = sensor.position;
-          fpsXPos = sensorPos.x;
-          fpsYPos = sensorPos.y;
-          fpsZPos = sensorPos.z;
-          mat4.translate(camMatrix, camMatrix, [-sensorPos.x * 1.01, -sensorPos.y * 1.01, -sensorPos.z * 1.01]); // Scale to get away from Earth
-
-          _showOrbitsAbove(); // Clears Orbit
-          break;
-        }
-    }
-    return camMatrix;
+      }
   }
+  return camMatrix;
+}
+
 var satLabelModeLastTime = 0;
 var isSatMiniBoxInUse = false;
 var labelCount;
 var hoverBoxOnSatMiniElements = [];
 var satHoverMiniDOM;
+
+function _lla2eci(lat,lon,alt,gmst) {
+  gmst = (typeof gmst == 'undefined') ? earthInfo.earthEra : gmst;
+  let eci = {};
+  cosLat = Math.cos(lat * DEG2RAD);
+  sinLat = Math.sin(lat * DEG2RAD);
+  cosLon = Math.cos((lon * DEG2RAD) + gmst);
+  sinLon = Math.sin((lon * DEG2RAD) + gmst);
+  eci.x = (RADIUS_OF_EARTH + alt) * cosLat * cosLon; // 6371 is radius of earth
+  eci.y = (RADIUS_OF_EARTH + alt) * cosLat * sinLon;
+  eci.z = (RADIUS_OF_EARTH + alt) * sinLat;
+  return eci;
+}
+
+function rotateToLLA(lat,lon,alt) {
+  let eci = _lla2eci(lat,lon,alt);
+  let cs = eci2CanvasSpace(eci);
+  let sphere = _canvasSpace2spherical(cs.x,cs.y,cs.z);
+  if (isNaN(sphere.phi)) {
+    console.warn('Phi Check Failed!');
+  } else {
+    canvasManager.cameraManager.targetPolarAngle = sphere.phi;
+  }
+  if (isNaN(sphere.theta)) {
+    console.warn('Theta Check Failed!');
+  } else {
+    canvasManager.cameraManager.targetAzimuthAngle = sphere.theta;
+  }
+  canvasManager.cameraManager.targetZoom = Math.max(sphere.radius,RADIUS_OF_EARTH + 10000);
+}
+
+function _canvasSpace2spherical(x,y,z) {
+  let spherical = new THREE.Spherical();
+  return spherical.setFromVector3(new THREE.Vector3(x,y,z));
+}
 
 function _onDrawLoopComplete (cb) {
   if (typeof cb == 'undefined') return;
@@ -880,7 +1044,7 @@ function _showOrbitsAbove () {
   }
 
   if (!sensorManager.checkSensorSelected()) return;
-  if (drawNow - satLabelModeLastTime < settingsManager.satLabelInterval) return;
+  if (timeManager.lastDrawTime - satLabelModeLastTime < settingsManager.satLabelInterval) return;
 
   orbitDisplay.clearInViewOrbit();
 
@@ -921,15 +1085,15 @@ function _showOrbitsAbove () {
     labelCount++;
   }
   isSatMiniBoxInUse = true;
-  satLabelModeLastTime = drawNow;
+  satLabelModeLastTime = timeManager.lastlastDrawTime;
 }
 function _hoverBoxOnSat (satId, satX, satY) {
   if (cameraType.current === cameraType.PLANETARIUM && !settingsManager.isDemoModeOn) {
     satHoverBoxDOM.css({display: 'none'});
     if (satId === -1) {
-      canvasDOM.css({cursor: 'default'});
+      canvasDOM2.css({cursor: 'default'});
     } else {
-      canvasDOM.css({cursor: 'pointer'});
+      canvasDOM2.css({cursor: 'pointer'});
     }
     return;
   }
@@ -940,7 +1104,7 @@ function _hoverBoxOnSat (satId, satX, satY) {
     }
     // satHoverBoxDOM.html('(none)');
     satHoverBoxDOM.css({display: 'none'});
-    canvasDOM.css({cursor: 'default'});
+    canvasDOM2.css({cursor: 'default'});
     isHoverBoxVisible = false;
   } else if (!isDragging && !settingsManager.isDisableSatHoverBox) {
     var sat = satSet.getSatExtraOnly(satId);
@@ -1002,7 +1166,7 @@ function _hoverBoxOnSat (satId, satX, satY) {
       left: satX + 20,
       top: satY - 10
     });
-    canvasDOM.css({cursor: 'pointer'});
+    canvasDOM2.css({cursor: 'pointer'});
   }
 }
 function _calculateSensorPos (pos) {
@@ -1058,20 +1222,15 @@ function _fpsMovement () {
       fpsVertSpeed = Math.min(fpsVertSpeed + Math.max(fpsVertSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsVertSpeed);
     }
 
-    // console.log('Front: ' + fpsForwardSpeed + ' - ' + 'Side: ' + fpsSideSpeed + ' - ' + 'Vert: ' + fpsVertSpeed);
-
-    if (cameraType.FPS) {
+    if (cameraType.current == cameraType.FPS) {
       if (fpsForwardSpeed !== 0) {
-        fpsXPos -= Math.sin(fpsYaw * DEG2RAD) * fpsForwardSpeed * fpsRun * fpsElapsed;
-        fpsYPos -= Math.cos(fpsYaw * DEG2RAD) * fpsForwardSpeed * fpsRun * fpsElapsed;
-        fpsZPos += Math.sin(fpsPitch * DEG2RAD) * fpsForwardSpeed * fpsRun * fpsElapsed;
+        canvasManager.camera.translateZ(-fpsForwardSpeed * fpsRun * fpsElapsed);
       }
       if (fpsVertSpeed !== 0) {
-        fpsZPos -= fpsVertSpeed * fpsRun * fpsElapsed;
+        canvasManager.camera.translateY(-fpsVertSpeed * fpsRun * fpsElapsed);
       }
       if (fpsSideSpeed !== 0) {
-        fpsXPos -= Math.cos(-fpsYaw * DEG2RAD) * fpsSideSpeed * fpsRun * fpsElapsed;
-        fpsYPos -= Math.sin(-fpsYaw * DEG2RAD) * fpsSideSpeed * fpsRun * fpsElapsed;
+        canvasManager.camera.translateX(fpsSideSpeed * fpsRun * fpsElapsed);
       }
     }
 
@@ -1087,7 +1246,6 @@ function _fpsMovement () {
     fpsRotate += fpsRotateRate * fpsElapsed;
     fpsYaw += fpsYawRate * fpsElapsed;
 
-    // console.log('Pitch: ' + fpsPitch + ' - ' + 'Rotate: ' + fpsRotate + ' - ' + 'Yaw: ' + fpsYaw);
   }
   fpsLastTime = fpsTimeNow;
 }
@@ -1111,6 +1269,24 @@ function getEarthScreenPoint (x, y) {
     return;
   }
 }
+
+function _snapToObject(sat) {
+  // try {
+  console.log(sat.position);
+    let pos = eci2CanvasSpace(sat.position);
+    canvasManager.camera.position.x = 0;
+    canvasManager.camera.position.y = 0;
+    canvasManager.camera.position.z = 0;
+    console.log(pos);
+    canvasManager.camera.lookAt(pos.x,pos.y,pos.z);
+    canvasManager.camera.translateZ(-50000);
+    canvasManager.camera.lookAt(pos.x,pos.y,pos.z);
+  // } catch (e) {
+    // console.warn(`snapToObject can't calculate position in canvas space!`);
+  // }
+}
+
+
 
 var currentSearchSats;
 function _updateHover () {
@@ -1181,7 +1357,10 @@ function _drawLines() {
 
       const material = new THREE.ShaderMaterial({
         vertexShader: vs,
-        fragmentShader: fs
+        fragmentShader: fs,
+        polygonOffset: true,
+        polygonOffsetFactor: -1.0,
+        polygonOffsetUnits: 1.0,
       });
       material.transparent = true;
 
@@ -1205,7 +1384,6 @@ function _watermarkedDataURL(canvas,text){
   cw=tempCanvas.width=canvas.width;
   ch=tempCanvas.height=canvas.height;
   tempCtx.drawImage(canvas,0,0);
-  debugger;
   tempCtx.font = "24px nasalization";
   var textWidth = tempCtx.measureText(text).width;
   tempCtx.globalAlpha = 1.0;
@@ -1224,29 +1402,17 @@ function _camSnapToSat (sat) {
   However, the user might have broken out of the zoom snap or angle snap.
   If so, don't change those targets. */
 
-  if (camAngleSnappedOnSat) {
-    var pos = sat.position;
-    var r = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
-    var yaw = Math.atan2(pos.y, pos.x) + TAU / 4 - earthInfo.earthEra;
-    var pitch = Math.atan2(pos.z, r);
-    if (!pitch) {
-      console.warn('Pitch Calculation Error');
-      pitch = 0;
-      camZoomSnappedOnSat = false;
-      camAngleSnappedOnSat = false;
-    }
-    if (!yaw) {
-      console.warn('Yaw Calculation Error');
-      yaw = 0;
-      camZoomSnappedOnSat = false;
-      camAngleSnappedOnSat = false;
-    }
-    if (cameraType.current=== cameraType.PLANETARIUM) {
-      // camSnap(-pitch, -yaw);
-    } else {
-      camSnap(pitch, yaw);
-    }
+  let pos = eci2CanvasSpace(sat.position);
+  canvasManager.cameraManager.selectedSatVec3.set(pos.x,pos.y,pos.z);
+  if (canvasManager.cameraManager.targetPosition == null) {
+      canvasManager.controls.object.position.x = canvasManager.cameraManager.selectedSatVec3.x;
+      canvasManager.controls.object.position.y = canvasManager.cameraManager.selectedSatVec3.y;
+      canvasManager.controls.object.position.z = canvasManager.cameraManager.selectedSatVec3.z;
+      canvasManager.controls.object.position.round();
+      canvasManager.controls.object.lookAt(0,0,0);
+      canvasManager.controls.object.translateZ(canvasManager.cameraManager.zoomFactor);
   }
+  return;
 
   if (camZoomSnappedOnSat) {
     var altitude;
@@ -1273,4 +1439,988 @@ function _camSnapToSat (sat) {
   if (cameraType.current=== cameraType.PLANETARIUM) {
     zoomTarget = 0.01;
   }
+}
+function eci2CanvasSpace(position) {
+  return {
+    x: position.x,
+    y: position.z,
+    z: position.y * -1
+  };
+}
+function _loadOrbitControls() {
+  // This set of controls performs orbiting, dollying (zooming), and panning.
+  // Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
+  //
+  //    Orbit - left mouse / touch: one-finger move
+  //    Zoom - middle mouse, or mousewheel / touch: two-finger spread or squish
+  //    Pan - right mouse, or left mouse + ctrl/meta/shiftKey, or arrow keys / touch: two-finger move
+
+  let OrbitControls = function(object, domElement) {
+    this.object = object;
+
+    this.domElement = domElement !== undefined ? domElement : document;
+
+    // Set to false to disable this control
+    this.enabled = true;
+
+    // "target" sets the location of focus, where the object orbits around
+    this.target = new THREE.Vector3();
+
+    // How far you can dolly in and out ( PerspectiveCamera only )
+    this.minDistance = 0;
+    this.maxDistance = Infinity;
+
+    // How far you can zoom in and out ( OrthographicCamera only )
+    this.minZoom = 0;
+    this.maxZoom = Infinity;
+
+    // How far you can orbit vertically, upper and lower limits.
+    // Range is 0 to Math.PI radians.
+    this.minPolarAngle = 0; // radians
+    this.maxPolarAngle = Math.PI; // radians
+
+    // How far you can orbit horizontally, upper and lower limits.
+    // If set, must be a sub-interval of the interval [ - Math.PI, Math.PI ].
+    this.minAzimuthAngle = -Infinity; // radians
+    this.maxAzimuthAngle = Infinity; // radians
+
+    // Set to true to enable damping (inertia)
+    // If damping is enabled, you must call controls.update() in your animation loop
+    this.enableDamping = false;
+    this.dampingFactor = 0.25;
+
+    // This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
+    // Set to false to disable zooming
+    this.enableZoom = true;
+    this.zoomSpeed = 1.0;
+
+    // Set to false to disable rotating
+    this.enableRotate = true;
+    this.rotateSpeed = 1.0;
+
+    // Set to false to disable panning
+    this.enablePan = true;
+    this.panSpeed = 1.0;
+    this.screenSpacePanning = false; // if true, pan in screen-space
+    this.keyPanSpeed = 7.0; // pixels moved per arrow key push
+
+    // Set to true to automatically rotate around the target
+    // If auto-rotate is enabled, you must call controls.update() in your animation loop
+    this.autoRotate = false;
+    this.autoRotateSpeed = 2.0; // 30 seconds per round when fps is 60
+
+    // Set to false to disable use of the keys
+    this.enableKeys = true;
+
+    // The four arrow keys
+    this.keys = { LEFT: 37, UP: 38, RIGHT: 39, BOTTOM: 40 };
+
+    // Mouse buttons
+    this.mouseButtons = {
+      LEFT: THREE.MOUSE.LEFT,
+      MIDDLE: THREE.MOUSE.MIDDLE,
+      RIGHT: THREE.MOUSE.RIGHT
+    };
+
+    // for reset
+    this.target0 = this.target.clone();
+    this.position0 = this.object.position.clone();
+    this.zoom0 = this.object.zoom;
+
+    //
+    // public methods
+    //
+
+    this.getPolarAngle = function() {
+      return spherical.phi;
+    };
+
+    this.getAzimuthalAngle = function() {
+      return spherical.theta;
+    };
+
+    this.phiOverride = null;
+    this.thetaOverride = null;
+
+    this.saveState = function() {
+      scope.target0.copy(scope.target);
+      scope.position0.copy(scope.object.position);
+      scope.zoom0 = scope.object.zoom;
+    };
+
+    this.reset = function() {
+      scope.target.copy(scope.target0);
+      scope.object.position.copy(scope.position0);
+      scope.object.zoom = scope.zoom0;
+
+      scope.object.updateProjectionMatrix();
+      scope.dispatchEvent(changeEvent);
+
+      scope.update();
+
+      state = STATE.NONE;
+    };
+
+    // this method is exposed, but perhaps it would be better if we can make it private...
+    this.update = (function() {
+      var offset = new THREE.Vector3();
+
+      // so camera.up is the orbit axis
+      var quat = new THREE.Quaternion().setFromUnitVectors(
+        object.up,
+        new THREE.Vector3(0, 1, 0)
+      );
+      var quatInverse = quat.clone().inverse();
+
+      var lastPosition = new THREE.Vector3();
+      var lastQuaternion = new THREE.Quaternion();
+
+      return function update() {
+        var position = scope.object.position;
+
+        offset.copy(position).sub(scope.target);
+
+        // rotate offset to "y-axis-is-up" space
+        offset.applyQuaternion(quat);
+
+        // angle from z-axis around y-axis
+        spherical.setFromVector3(offset);
+
+        if (scope.autoRotate && state === STATE.NONE) {
+          scope.rotateLeft(getAutoRotationAngle());
+        }
+
+        spherical.theta += sphericalDelta.theta;
+        spherical.phi += sphericalDelta.phi;
+
+        // restrict theta to be between desired limits
+        spherical.theta = Math.max(
+          scope.minAzimuthAngle,
+          Math.min(scope.maxAzimuthAngle, spherical.theta)
+        );
+
+        if (scope.thetaOverride !== null) {
+          spherical.theta = scope.thetaOverride;
+          scope.thetaOverride = null;
+        }
+
+        // restrict phi to be between desired limits
+        spherical.phi = Math.max(
+          scope.minPolarAngle,
+          Math.min(scope.maxPolarAngle, spherical.phi)
+        );
+
+        if (scope.phiOverride !== null) {
+          spherical.phi = scope.phiOverride;
+          scope.phiOverride = null;
+        }
+
+        spherical.makeSafe();
+
+        spherical.radius *= scale;
+
+        // restrict radius to be between desired limits
+        spherical.radius = Math.max(
+          scope.minDistance,
+          Math.min(scope.maxDistance, spherical.radius)
+        );
+
+        // move target to panned location
+        scope.target.add(panOffset);
+
+        offset.setFromSpherical(spherical);
+
+        // rotate offset back to "camera-up-vector-is-up" space
+        offset.applyQuaternion(quatInverse);
+
+        position.copy(scope.target).add(offset);
+
+        scope.object.lookAt(scope.target);
+
+        if (scope.enableDamping === true) {
+          sphericalDelta.theta *= 1 - scope.dampingFactor;
+          sphericalDelta.phi *= 1 - scope.dampingFactor;
+
+          panOffset.multiplyScalar(1 - scope.dampingFactor);
+        } else {
+          sphericalDelta.set(0, 0, 0);
+
+          panOffset.set(0, 0, 0);
+        }
+
+        scale = 1;
+
+        // update condition is:
+        // min(camera displacement, camera rotation in radians)^2 > EPS
+        // using small-angle approximation cos(x/2) = 1 - x^2 / 8
+
+        if (
+          zoomChanged ||
+          lastPosition.distanceToSquared(scope.object.position) > EPS ||
+          8 * (1 - lastQuaternion.dot(scope.object.quaternion)) > EPS
+        ) {
+          scope.dispatchEvent(changeEvent);
+
+          lastPosition.copy(scope.object.position);
+          lastQuaternion.copy(scope.object.quaternion);
+          zoomChanged = false;
+
+          return true;
+        }
+
+        return false;
+      };
+    })();
+
+    this.dispose = function() {
+      scope.domElement.removeEventListener('contextmenu', onContextMenu, false);
+      scope.domElement.removeEventListener('mousedown', onMouseDown, false);
+      scope.domElement.removeEventListener('wheel', onMouseWheel, false);
+
+      scope.domElement.removeEventListener('touchstart', onTouchStart, false);
+      scope.domElement.removeEventListener('touchend', onTouchEnd, false);
+      scope.domElement.removeEventListener('touchmove', onTouchMove, false);
+
+      document.removeEventListener('mousemove', onMouseMove, false);
+      document.removeEventListener('mouseup', onMouseUp, false);
+
+      window.removeEventListener('keydown', onKeyDown, false);
+
+      //scope.dispatchEvent( { type: 'dispose' } ); // should this be added here?
+    };
+
+    //
+    // internals
+    //
+
+    var scope = this;
+
+    var changeEvent = { type: 'change' };
+    var startEvent = { type: 'start' };
+    var endEvent = { type: 'end' };
+
+    var STATE = {
+      NONE: -1,
+      ROTATE: 0,
+      DOLLY: 1,
+      PAN: 2,
+      TOUCH_ROTATE: 3,
+      TOUCH_DOLLY_PAN: 4
+    };
+
+    var state = STATE.NONE;
+
+    var EPS = 0.000001;
+
+    // current position in spherical coordinates
+    var spherical = new THREE.Spherical();
+    var sphericalDelta = new THREE.Spherical();
+
+    var scale = 1;
+    var panOffset = new THREE.Vector3();
+    var zoomChanged = false;
+
+    var rotateStart = new THREE.Vector2();
+    var rotateEnd = new THREE.Vector2();
+    var rotateDelta = new THREE.Vector2();
+
+    var panStart = new THREE.Vector2();
+    var panEnd = new THREE.Vector2();
+    var panDelta = new THREE.Vector2();
+
+    var dollyStart = new THREE.Vector2();
+    var dollyEnd = new THREE.Vector2();
+    var dollyDelta = new THREE.Vector2();
+
+    function getAutoRotationAngle() {
+      return ((2 * Math.PI) / 60 / 60) * scope.autoRotateSpeed;
+    }
+
+    function getZoomScale() {
+      return Math.pow(0.95, scope.zoomSpeed);
+    }
+
+    this.setPhiOverride = (phi) => {
+      this.phiOverride = phi;
+      sphericalDelta.phi = 0;
+    };
+
+    this.setThetaOverride = (theta) => {
+      this.thetaOverride = theta;
+      sphericalDelta.theta = 0;
+    };
+
+    this.rotateLeft = (angle) => {
+      sphericalDelta.theta -= angle;
+    };
+
+    this.rotateUp = (angle) => {
+      sphericalDelta.phi -= angle;
+    };
+
+    var panLeft = (function() {
+      var v = new THREE.Vector3();
+
+      return function panLeft(distance, objectMatrix) {
+        v.setFromMatrixColumn(objectMatrix, 0); // get X column of objectMatrix
+        v.multiplyScalar(-distance);
+
+        panOffset.add(v);
+      };
+    })();
+
+    var panUp = (function() {
+      var v = new THREE.Vector3();
+
+      return function panUp(distance, objectMatrix) {
+        if (scope.screenSpacePanning === true) {
+          v.setFromMatrixColumn(objectMatrix, 1);
+        } else {
+          v.setFromMatrixColumn(objectMatrix, 0);
+          v.crossVectors(scope.object.up, v);
+        }
+
+        v.multiplyScalar(distance);
+
+        panOffset.add(v);
+      };
+    })();
+
+    // deltaX and deltaY are in pixels; right and down are positive
+    var pan = (function() {
+      var offset = new THREE.Vector3();
+
+      return function pan(deltaX, deltaY) {
+        var element =
+          scope.domElement === document
+            ? scope.domElement.body
+            : scope.domElement;
+
+        if (scope.object.isPerspectiveCamera) {
+          // perspective
+          var position = scope.object.position;
+          offset.copy(position).sub(scope.target);
+          var targetDistance = offset.length();
+
+          // half of the fov is center to top of screen
+          targetDistance *= Math.tan(((scope.object.fov / 2) * Math.PI) / 180.0);
+
+          // we use only clientHeight here so aspect ratio does not distort speed
+          panLeft(
+            (2 * deltaX * targetDistance) / element.clientHeight,
+            scope.object.matrix
+          );
+          panUp(
+            (2 * deltaY * targetDistance) / element.clientHeight,
+            scope.object.matrix
+          );
+        } else if (scope.object.isOrthographicCamera) {
+          // orthographic
+          panLeft(
+            (deltaX * (scope.object.right - scope.object.left)) /
+              scope.object.zoom /
+              element.clientWidth,
+            scope.object.matrix
+          );
+          panUp(
+            (deltaY * (scope.object.top - scope.object.bottom)) /
+              scope.object.zoom /
+              element.clientHeight,
+            scope.object.matrix
+          );
+        } else {
+          // camera neither orthographic nor perspective
+          console.warn(
+            'WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.'
+          );
+          scope.enablePan = false;
+        }
+      };
+    })();
+
+    function dollyIn(dollyScale) {
+      if (scope.object.isPerspectiveCamera) {
+        scale /= dollyScale;
+      } else if (scope.object.isOrthographicCamera) {
+        scope.object.zoom = Math.max(
+          scope.minZoom,
+          Math.min(scope.maxZoom, scope.object.zoom * dollyScale)
+        );
+        scope.object.updateProjectionMatrix();
+        zoomChanged = true;
+      } else {
+        console.warn(
+          'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.'
+        );
+        scope.enableZoom = false;
+      }
+    }
+
+    function dollyOut(dollyScale) {
+      if (scope.object.isPerspectiveCamera) {
+        scale *= dollyScale;
+      } else if (scope.object.isOrthographicCamera) {
+        scope.object.zoom = Math.max(
+          scope.minZoom,
+          Math.min(scope.maxZoom, scope.object.zoom / dollyScale)
+        );
+        scope.object.updateProjectionMatrix();
+        zoomChanged = true;
+      } else {
+        console.warn(
+          'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.'
+        );
+        scope.enableZoom = false;
+      }
+    }
+
+    //
+    // event callbacks - update the object state
+    //
+
+    function handleMouseDownRotate(event) {
+      //console.log( 'handleMouseDownRotate' );
+
+      rotateStart.set(event.clientX, event.clientY);
+    }
+
+    function handleMouseDownDolly(event) {
+      //console.log( 'handleMouseDownDolly' );
+
+      dollyStart.set(event.clientX, event.clientY);
+    }
+
+    function handleMouseDownPan(event) {
+      //console.log( 'handleMouseDownPan' );
+
+      panStart.set(event.clientX, event.clientY);
+    }
+
+    function handleMouseMoveRotate(event) {
+      //console.log( 'handleMouseMoveRotate' );
+
+      rotateEnd.set(event.clientX, event.clientY);
+
+      rotateDelta
+        .subVectors(rotateEnd, rotateStart)
+        .multiplyScalar(scope.rotateSpeed);
+
+      var element =
+        scope.domElement === document ? scope.domElement.body : scope.domElement;
+
+      scope.rotateLeft((2 * Math.PI * rotateDelta.x) / element.clientHeight); // yes, height
+
+      scope.rotateUp((2 * Math.PI * rotateDelta.y) / element.clientHeight);
+
+      rotateStart.copy(rotateEnd);
+
+      scope.update();
+    }
+
+    function handleMouseMoveDolly(event) {
+      //console.log( 'handleMouseMoveDolly' );
+
+      dollyEnd.set(event.clientX, event.clientY);
+
+      dollyDelta.subVectors(dollyEnd, dollyStart);
+
+      if (dollyDelta.y > 0) {
+        dollyIn(getZoomScale());
+      } else if (dollyDelta.y < 0) {
+        dollyOut(getZoomScale());
+      }
+
+      dollyStart.copy(dollyEnd);
+
+      scope.update();
+    }
+
+    function handleMouseMovePan(event) {
+      //console.log( 'handleMouseMovePan' );
+
+      panEnd.set(event.clientX, event.clientY);
+
+      panDelta.subVectors(panEnd, panStart).multiplyScalar(scope.panSpeed);
+
+      pan(panDelta.x, panDelta.y);
+
+      panStart.copy(panEnd);
+
+      scope.update();
+    }
+
+    function handleMouseUp(event) {
+      // console.log( 'handleMouseUp' );
+    }
+
+    function handleMouseWheel(event) {
+      // console.log( 'handleMouseWheel' );
+
+      if (event.deltaY < 0) {
+        dollyOut(getZoomScale());
+        canvasManager.cameraManager.zoomFactor -= 75;
+      } else if (event.deltaY > 0) {
+        dollyIn(getZoomScale());
+        canvasManager.cameraManager.zoomFactor += 75;
+      }
+
+
+      scope.update();
+    }
+
+    function handleKeyDown(event) {
+      //console.log( 'handleKeyDown' );
+
+      // prevent the browser from scrolling on cursor up/down
+
+      // event.preventDefault();
+
+      switch (event.keyCode) {
+        case scope.keys.UP:
+          pan(0, scope.keyPanSpeed);
+          scope.update();
+          break;
+
+        case scope.keys.BOTTOM:
+          pan(0, -scope.keyPanSpeed);
+          scope.update();
+          break;
+
+        case scope.keys.LEFT:
+          pan(scope.keyPanSpeed, 0);
+          scope.update();
+          break;
+
+        case scope.keys.RIGHT:
+          pan(-scope.keyPanSpeed, 0);
+          scope.update();
+          break;
+      }
+    }
+
+    function handleTouchStartRotate(event) {
+      //console.log( 'handleTouchStartRotate' );
+
+      rotateStart.set(event.touches[0].pageX, event.touches[0].pageY);
+    }
+
+    function handleTouchStartDollyPan(event) {
+      //console.log( 'handleTouchStartDollyPan' );
+
+      if (scope.enableZoom) {
+        var dx = event.touches[0].pageX - event.touches[1].pageX;
+        var dy = event.touches[0].pageY - event.touches[1].pageY;
+
+        var distance = Math.sqrt(dx * dx + dy * dy);
+
+        dollyStart.set(0, distance);
+      }
+
+      if (scope.enablePan) {
+        var x = 0.5 * (event.touches[0].pageX + event.touches[1].pageX);
+        var y = 0.5 * (event.touches[0].pageY + event.touches[1].pageY);
+
+        panStart.set(x, y);
+      }
+    }
+
+    function handleTouchMoveRotate(event) {
+      //console.log( 'handleTouchMoveRotate' );
+
+      rotateEnd.set(event.touches[0].pageX, event.touches[0].pageY);
+
+      rotateDelta
+        .subVectors(rotateEnd, rotateStart)
+        .multiplyScalar(scope.rotateSpeed);
+
+      var element =
+        scope.domElement === document ? scope.domElement.body : scope.domElement;
+
+      scope.rotateLeft((2 * Math.PI * rotateDelta.x) / element.clientHeight); // yes, height
+
+      scope.rotateUp((2 * Math.PI * rotateDelta.y) / element.clientHeight);
+
+      rotateStart.copy(rotateEnd);
+
+      scope.update();
+    }
+
+    function handleTouchMoveDollyPan(event) {
+      //console.log( 'handleTouchMoveDollyPan' );
+
+      if (scope.enableZoom) {
+        var dx = event.touches[0].pageX - event.touches[1].pageX;
+        var dy = event.touches[0].pageY - event.touches[1].pageY;
+
+        var distance = Math.sqrt(dx * dx + dy * dy);
+
+        dollyEnd.set(0, distance);
+
+        dollyDelta.set(0, Math.pow(dollyEnd.y / dollyStart.y, scope.zoomSpeed));
+
+        dollyIn(dollyDelta.y);
+
+        dollyStart.copy(dollyEnd);
+      }
+
+      if (scope.enablePan) {
+        var x = 0.5 * (event.touches[0].pageX + event.touches[1].pageX);
+        var y = 0.5 * (event.touches[0].pageY + event.touches[1].pageY);
+
+        panEnd.set(x, y);
+
+        panDelta.subVectors(panEnd, panStart).multiplyScalar(scope.panSpeed);
+
+        pan(panDelta.x, panDelta.y);
+
+        panStart.copy(panEnd);
+      }
+
+      scope.update();
+    }
+
+    function handleTouchEnd(event) {
+      //console.log( 'handleTouchEnd' );
+    }
+
+    //
+    // event handlers - FSM: listen for events and reset state
+    //
+
+    function onMouseDown(event) {
+      if (scope.enabled === false) return;
+      canvasManager.controls.autoRotate = false;
+      // Prevent the browser from scrolling.
+
+      // event.preventDefault();
+
+      // Manually set the focus since calling preventDefault above
+      // prevents the browser from setting it automatically.
+
+      scope.domElement.focus ? scope.domElement.focus() : window.focus();
+
+      switch (event.button) {
+        case scope.mouseButtons.LEFT:
+          if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            if (scope.enablePan === false) return;
+
+            handleMouseDownPan(event);
+
+            state = STATE.PAN;
+          } else {
+            if (scope.enableRotate === false) return;
+
+            handleMouseDownRotate(event);
+
+            state = STATE.ROTATE;
+          }
+
+          break;
+
+        case scope.mouseButtons.MIDDLE:
+          if (scope.enableZoom === false) return;
+
+          handleMouseDownDolly(event);
+
+          state = STATE.DOLLY;
+
+          break;
+
+        case scope.mouseButtons.RIGHT:
+          if (scope.enablePan === false) return;
+
+          handleMouseDownPan(event);
+
+          state = STATE.PAN;
+
+          break;
+      }
+
+      if (state !== STATE.NONE) {
+        document.addEventListener('mousemove', onMouseMove, false);
+        document.addEventListener('mouseup', onMouseUp, false);
+
+        scope.dispatchEvent(startEvent);
+      }
+    }
+
+    function onMouseMove(event) {
+      if (scope.enabled === false) return;
+
+      // event.preventDefault();
+
+      switch (state) {
+        case STATE.ROTATE:
+          if (scope.enableRotate === false) return;
+
+          handleMouseMoveRotate(event);
+
+          break;
+
+        case STATE.DOLLY:
+          if (scope.enableZoom === false) return;
+
+          handleMouseMoveDolly(event);
+
+          break;
+
+        case STATE.PAN:
+          if (scope.enablePan === false) return;
+
+          handleMouseMovePan(event);
+
+          break;
+      }
+    }
+
+    function onMouseUp(event) {
+      if (scope.enabled === false) return;
+
+      handleMouseUp(event);
+
+      document.removeEventListener('mousemove', onMouseMove, false);
+      document.removeEventListener('mouseup', onMouseUp, false);
+
+      scope.dispatchEvent(endEvent);
+
+      state = STATE.NONE;
+    }
+
+    function onMouseWheel(event) {
+      if (
+        scope.enabled === false ||
+        scope.enableZoom === false ||
+        (state !== STATE.NONE && state !== STATE.ROTATE)
+      )
+        return;
+
+      // event.preventDefault();
+      event.stopPropagation();
+
+      scope.dispatchEvent(startEvent);
+
+      handleMouseWheel(event);
+
+      scope.dispatchEvent(endEvent);
+    }
+
+    function onKeyDown(event) {
+      if (
+        scope.enabled === false ||
+        scope.enableKeys === false ||
+        scope.enablePan === false
+      )
+        return;
+
+      handleKeyDown(event);
+    }
+
+    function onTouchStart(event) {
+      if (scope.enabled === false) return;
+
+      canvasManager.controls.autoRotate = false;
+
+      // event.preventDefault();
+
+      switch (event.touches.length) {
+        case 1: // one-fingered touch: rotate
+          if (scope.enableRotate === false) return;
+
+          handleTouchStartRotate(event);
+
+          state = STATE.TOUCH_ROTATE;
+
+          break;
+
+        case 2: // two-fingered touch: dolly-pan
+          if (scope.enableZoom === false && scope.enablePan === false) return;
+
+          handleTouchStartDollyPan(event);
+
+          state = STATE.TOUCH_DOLLY_PAN;
+
+          break;
+
+        default:
+          state = STATE.NONE;
+      }
+
+      if (state !== STATE.NONE) {
+        scope.dispatchEvent(startEvent);
+      }
+    }
+
+    function onTouchMove(event) {
+      if (scope.enabled === false) return;
+
+      // event.preventDefault();
+      event.stopPropagation();
+
+      switch (event.touches.length) {
+        case 1: // one-fingered touch: rotate
+          if (scope.enableRotate === false) return;
+          if (state !== STATE.TOUCH_ROTATE) return; // is this needed?
+
+          handleTouchMoveRotate(event);
+
+          break;
+
+        case 2: // two-fingered touch: dolly-pan
+          if (scope.enableZoom === false && scope.enablePan === false) return;
+          if (state !== STATE.TOUCH_DOLLY_PAN) return; // is this needed?
+
+          handleTouchMoveDollyPan(event);
+
+          break;
+
+        default:
+          state = STATE.NONE;
+      }
+    }
+
+    function onTouchEnd(event) {
+      if (scope.enabled === false) return;
+
+      handleTouchEnd(event);
+
+      scope.dispatchEvent(endEvent);
+
+      state = STATE.NONE;
+    }
+
+    function onContextMenu(event) {
+      if (scope.enabled === false) return;
+
+      // event.preventDefault();
+    }
+
+    //
+
+    scope.domElement.addEventListener('contextmenu', onContextMenu, false);
+
+    scope.domElement.addEventListener('mousedown', onMouseDown, false);
+    scope.domElement.addEventListener('wheel', onMouseWheel, false);
+
+    scope.domElement.addEventListener('touchstart', onTouchStart, false);
+    scope.domElement.addEventListener('touchend', onTouchEnd, false);
+    scope.domElement.addEventListener('touchmove', onTouchMove, false);
+
+    window.addEventListener('keydown', onKeyDown, false);
+
+    // force an update at start
+
+    this.update();
+  };
+
+  OrbitControls.prototype = Object.create(THREE.EventDispatcher.prototype);
+  OrbitControls.prototype.constructor = OrbitControls;
+
+  Object.defineProperties(OrbitControls.prototype, {
+    center: {
+      get: function() {
+        console.warn('THREE.OrbitControls: .center has been renamed to .target');
+        return this.target;
+      }
+    },
+
+    // backward compatibility
+
+    noZoom: {
+      get: function() {
+        console.warn(
+          'THREE.OrbitControls: .noZoom has been deprecated. Use .enableZoom instead.'
+        );
+        return !this.enableZoom;
+      },
+
+      set: function(value) {
+        console.warn(
+          'THREE.OrbitControls: .noZoom has been deprecated. Use .enableZoom instead.'
+        );
+        this.enableZoom = !value;
+      }
+    },
+
+    noRotate: {
+      get: function() {
+        console.warn(
+          'THREE.OrbitControls: .noRotate has been deprecated. Use .enableRotate instead.'
+        );
+        return !this.enableRotate;
+      },
+
+      set: function(value) {
+        console.warn(
+          'THREE.OrbitControls: .noRotate has been deprecated. Use .enableRotate instead.'
+        );
+        this.enableRotate = !value;
+      }
+    },
+
+    noPan: {
+      get: function() {
+        console.warn(
+          'THREE.OrbitControls: .noPan has been deprecated. Use .enablePan instead.'
+        );
+        return !this.enablePan;
+      },
+
+      set: function(value) {
+        console.warn(
+          'THREE.OrbitControls: .noPan has been deprecated. Use .enablePan instead.'
+        );
+        this.enablePan = !value;
+      }
+    },
+
+    noKeys: {
+      get: function() {
+        console.warn(
+          'THREE.OrbitControls: .noKeys has been deprecated. Use .enableKeys instead.'
+        );
+        return !this.enableKeys;
+      },
+
+      set: function(value) {
+        console.warn(
+          'THREE.OrbitControls: .noKeys has been deprecated. Use .enableKeys instead.'
+        );
+        this.enableKeys = !value;
+      }
+    },
+
+    staticMoving: {
+      get: function() {
+        console.warn(
+          'THREE.OrbitControls: .staticMoving has been deprecated. Use .enableDamping instead.'
+        );
+        return !this.enableDamping;
+      },
+
+      set: function(value) {
+        console.warn(
+          'THREE.OrbitControls: .staticMoving has been deprecated. Use .enableDamping instead.'
+        );
+        this.enableDamping = !value;
+      }
+    },
+
+    dynamicDampingFactor: {
+      get: function() {
+        console.warn(
+          'THREE.OrbitControls: .dynamicDampingFactor has been renamed. Use .dampingFactor instead.'
+        );
+        return this.dampingFactor;
+      },
+
+      set: function(value) {
+        console.warn(
+          'THREE.OrbitControls: .dynamicDampingFactor has been renamed. Use .dampingFactor instead.'
+        );
+        this.dampingFactor = value;
+      }
+    }
+  });
+
+  window.OrbitControls = OrbitControls;
 }

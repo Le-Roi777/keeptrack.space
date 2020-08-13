@@ -1027,7 +1027,11 @@ or mirrored at any other location without the express written permission of the 
   sensorManager.selectedSensor = {};
   sensorManager.whichRadar = '';
   sensorManager.setSensor = function (selectedSensor, staticNum) {
-    if (!settingsManager.offline) { localStorage.setItem("currentSensor", JSON.stringify([selectedSensor, staticNum])); }
+    try {
+      localStorage.setItem("currentSensor", JSON.stringify([selectedSensor, staticNum]));
+    } catch (e) {
+      console.log(`Couldn't clear the current sensor info!`);
+    }
     if (selectedSensor == null && staticNum == null) return;
     var sensor;
     if (selectedSensor === 'SSN') {
@@ -1158,8 +1162,8 @@ or mirrored at any other location without the express written permission of the 
           selectSat(-1);
           satSet.setColorScheme(settingsManager.currentColorScheme, true);
           // setTimeout(satSet.setColorScheme, 1500, settingsManager.currentColorScheme, true);
-          changeZoom(sensorManager.selectedSensor.zoom);
-          camSnap(latToPitch(sensorManager.selectedSensor.lat), longToYaw(sensorManager.selectedSensor.long));
+          rotateToLLA(sensorManager.selectedSensor.lat,sensorManager.selectedSensor.long,sensorManager.selectedSensor.obsmaxrange);
+          canvasManager.controls.autoRotate = false;
           uiManager.getsensorinfo();
         }
       }

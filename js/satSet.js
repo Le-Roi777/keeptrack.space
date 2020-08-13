@@ -1380,7 +1380,10 @@ var hoveringSat = -1;
 
   satSet.selectSat = (i) => {
     if (i === selectedSat) return;
-    if(isAnalysisMenuOpen && i != -1) { $('#anal-sat').val(satSet.getSat(i).SCC_NUM); }
+    // Reset Zoom
+    canvasManager.cameraManager.zoomFactor = canvasManager.cameraManager.zoomFactor0;
+    let sat = satSet.getSat(i);
+    if(isAnalysisMenuOpen && i != -1) { $('#anal-sat').val(sat.SCC_NUM); }
     adviceList.satelliteSelected();
     satCruncher.postMessage({
       satelliteSelected: [i]
@@ -1397,6 +1400,14 @@ var hoveringSat = -1;
       // gl.bufferSubData(gl.ARRAY_BUFFER, i * 4 * 4, new Float32Array(settingsManager.selectedColor));
       canvasManager.objects.sats.geometry.attributes.color.array.set(new Float32Array(settingsManager.selectedColor), i * 4);
     }
+
+    if (i !== -1) {
+      let pos = eci2CanvasSpace(sat.position);
+      canvasManager.cameraManager.targetPosition = pos;
+    } else {
+      canvasManager.cameraManager.targetPosition = null;
+    }
+
     selectedSat = i;
     canvasManager.objects.sats.geometry.attributes.color.needsUpdate = true;
 

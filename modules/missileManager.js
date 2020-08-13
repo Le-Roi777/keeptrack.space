@@ -5,7 +5,7 @@
   orbitDisplay
 
 */
-
+objectManager.isMissileManagerLoaded = true;
 (function () {
   var missileManager = {};
     missileManager.missilesInUse = 0;

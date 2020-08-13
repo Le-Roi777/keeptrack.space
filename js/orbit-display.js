@@ -37,12 +37,18 @@
   orbitDisplay.init = function () {
     orbitDisplay.materialRed = new THREE.LineBasicMaterial({
       color: 0xff0000,
-      linewidth: 3
+      linewidth: 3,
+      polygonOffset: true,
+      polygonOffsetFactor: -5.0,
+      polygonOffsetUnits: 10.0,
     });
 
     orbitDisplay.materialYellow = new THREE.LineBasicMaterial({
       color: 0xffff00,
-      linewidth: 3
+      linewidth: 3,
+      polygonOffset: true,
+      polygonOffsetFactor: -1.0,
+      polygonOffsetUnits: 1.0,
     });
 
     let lineBuf = new THREE.BufferGeometry();

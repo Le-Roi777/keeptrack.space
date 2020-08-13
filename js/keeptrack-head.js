@@ -264,6 +264,8 @@ db.init = (function (){
 
   settingsManager.currentLegend = 'default';
 
+  settingsManager.autoRotateSpeed = 0.02;
+
   settingsManager.nextNPassesCount = 5;
 
   settingsManager.timeMachineDelay = 3000;
@@ -341,9 +343,9 @@ settingsManager.satShader.maxAllowedSize = 100.0;
   settingsManager.reColorMinimumTime = 1000;
   settingsManager.colors = {};
   settingsManager.colors = JSON.parse(localStorage.getItem("settingsManager-colors"));
-  if (settingsManager.colors == null || settingsManager.colors.version !== '1.0.2') {
+  if (settingsManager.colors == null || settingsManager.colors.version !== '1.0.3') {
     settingsManager.colors = {};
-    settingsManager.colors.version = '1.0.2';
+    settingsManager.colors.version = '1.0.3';
     settingsManager.colors.facility = [0.64, 0.0, 0.64, 1.0];
     settingsManager.colors.starHi = [1.0, 1.0, 1.0, 1.0];
     settingsManager.colors.starMed = [1.0, 1.0, 1.0, 0.35];
