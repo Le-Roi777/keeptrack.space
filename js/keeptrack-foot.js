@@ -114,12 +114,16 @@ $(document).ready(function() {
       bottomIconsDivDOM.append('<img id="menu-satChng" src="" delayedsrc="' + settingsManager.installDirectory + 'images/satChng.png" class="bmenu-item tooltipped" alt="Catalog Changes" data-position="top" data-delay="50" data-tooltip="Catalog Changes">');
     }
     bottomIconsDivDOM.append('<img id="menu-countries" src="" delayedsrc="' + settingsManager.installDirectory + 'images/united-states.png" class="bmenu-item tooltipped" alt="Countries" data-position="top" data-delay="50" data-tooltip="Countries">');
-    if (objectManager.isSensorManagerLoaded) {
+    // Alternate Cameras Disabled
+    if (objectManager.isSensorManagerLoaded && false) {
       bottomIconsDivDOM.append('<img id="menu-planetarium" src="" delayedsrc="' + settingsManager.installDirectory + 'images/astronaut.png" class="bmenu-item-disabled bmenu-item tooltipped" alt="Planetarium View" data-position="top" data-delay="50" data-tooltip="Planetarium View">');
       bottomIconsDivDOM.append('<img id="menu-astronomy" src="" delayedsrc="' + settingsManager.installDirectory + 'images/ursa-major.png" class="bmenu-item-disabled bmenu-item tooltipped" alt="Astronomy View" data-position="top" data-delay="50" data-tooltip="Astronomy View">');
     }
     bottomIconsDivDOM.append('<img id="menu-map" src="" delayedsrc="' + settingsManager.installDirectory + 'images/map.png" class="bmenu-item-disabled bmenu-item tooltipped" alt="Stereographic Map" data-position="top" data-delay="50" data-tooltip="Stereographic Map">');
-    bottomIconsDivDOM.append('<img id="menu-satview" src="" delayedsrc="' + settingsManager.installDirectory + 'images/satellite.png" class="bmenu-item-disabled bmenu-item tooltipped" alt="Satellite View" data-position="top" data-delay="50" data-tooltip="Satellite View">');
+    // Alternate Cameras Disabled
+    if (false) {
+      bottomIconsDivDOM.append('<img id="menu-satview" src="" delayedsrc="' + settingsManager.installDirectory + 'images/satellite.png" class="bmenu-item-disabled bmenu-item tooltipped" alt="Satellite View" data-position="top" data-delay="50" data-tooltip="Satellite View">');
+    }
     if (objectManager.isSensorManagerLoaded) {
       numOfIcons++;
       bottomIconsDivDOM.append('<img id="menu-fov-bubble" src="" delayedsrc="' + settingsManager.installDirectory + 'images/fieldofview.png" class="bmenu-item-disabled bmenu-item tooltipped" alt="Show/Hide Field of View Bubble" data-position="top" data-delay="50" data-tooltip="Show/Hide Field of View Bubble">');

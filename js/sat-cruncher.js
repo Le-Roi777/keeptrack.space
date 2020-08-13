@@ -65,6 +65,8 @@ var isResetMarker = false;
 var isResetInView = false;
 var isResetSunlight = false;  // Remove
 
+var tempEci2Cs;
+
 /** OBSERVER VARIABLES */
 var sensor = {};
 var mSensor = {};
@@ -1042,6 +1044,12 @@ function propagateCruncher () {
         satCache[i].active = false;
       }
     }
+
+    // Convert from ECI to Screen SPACE
+    tempEci2Cs = satPos[i * 3 + 2];
+    satPos[i * 3 + 2] = -satPos[i * 3 + 1];
+    satPos[i * 3 + 1] = tempEci2Cs;
+
   }
   if (isResetFOVBubble) {
     isResetFOVBubble = false;

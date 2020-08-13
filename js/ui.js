@@ -118,11 +118,13 @@ var isAnalysisMenuOpen = false;
   var isWatchlistChanged = false;
 
   var updateInterval = 1000;
-  var speedModifier = 1;
+
 
   var touchStartTime;
 
   var uiManager = {};
+  uiManager.keyManager = {};
+  uiManager.keyManager.speedModifier = 1;
 
   var touchHoldButton = '';
   $(document).ready(function () { // Code Once index.htm is loaded
@@ -131,13 +133,13 @@ var isAnalysisMenuOpen = false;
     (function _licenseCheck () {
       db.log('_licenseCheck');
       if (typeof satel === 'undefined') satel = null;
-      if (settingsManager.offline && !_clk()) {
+      if (settingsManager.unofficialSite && !_clk()) {
         _offlineMessage();
         $('#license-watermark').removeClass('start-hidden');
         $('#license-watermark').show();
         console.warn('Please Contact Theodore Kruczek To Renew Your License <br> theodore.kruczek@gmail.com');
         console.warn('You will be redirected to the online version of keeptrack in 2 minutes.');
-        setTimeout(function() { window.location.replace('http://s4ts.com'); }, 1000 * 60 * 2);
+        setTimeout(function() { window.location.replace('http://keeptrack.com'); }, 1000 * 60 * 2);
         // throw new Error('Please Contact Theodore Kruczek To Renew Your License <br> theodore.kruczek@gmail.com');
       } else {
         // ga('send', 'event', 'Offline Software', settingsManager.offlineLocation, 'Licensed');
@@ -268,21 +270,9 @@ var isAnalysisMenuOpen = false;
       var latLon;
       canvasDOM2.on('touchmove', function (evt) {
         evt.preventDefault();
-        if (isPinching) {
-          var currentPinchDistance = Math.hypot(
-            evt.originalEvent.touches[0].pageX - evt.originalEvent.touches[1].pageX,
-            evt.originalEvent.touches[0].pageY - evt.originalEvent.touches[1].pageY);
-          deltaPinchDistance = ((startPinchDistance - currentPinchDistance) / maxPinchSize);
-          zoomTarget += deltaPinchDistance * (settingsManager.cameraMovementSpeed + 0.006);
-          zoomTarget = Math.min(Math.max(zoomTarget, 0), 1); // Force between 0 and 1
-        } else { // Dont Move While Zooming
+        if (!isPinching) {
           mouseX = evt.originalEvent.touches[0].clientX;
           mouseY = evt.originalEvent.touches[0].clientY;
-          if (isDragging && screenDragPoint[0] !== mouseX && screenDragPoint[1] !== mouseY) {
-            dragHasMoved = true;
-            camAngleSnappedOnSat = false;
-            camZoomSnappedOnSat = false;
-          }
           isMouseMoving = true;
           clearTimeout(mouseTimeout);
           mouseTimeout = setTimeout(function () {
@@ -293,35 +283,16 @@ var isAnalysisMenuOpen = false;
       canvasDOM2.on("mousemove", function (evt) {
         mouseX = evt.clientX;
         mouseY = evt.clientY;
-        if (isDragging && screenDragPoint[0] !== mouseX && screenDragPoint[1] !== mouseY) {
-          dragHasMoved = true;
-          camAngleSnappedOnSat = false;
-          camZoomSnappedOnSat = false;
-        }
         isMouseMoving = true;
+        dragHasMoved = (isDragging) ? true : false;
         clearTimeout(mouseTimeout);
         mouseTimeout = setTimeout(function () {
           isMouseMoving = false;
         }, 250);
       });
       canvasDOM2.on('wheel', function (evt) {
-        var delta = evt.originalEvent.deltaY;
-        if (evt.originalEvent.deltaMode === 1) {
-          delta *= 33.3333333;
-        }
-
-        if (delta < 0) {
-          isZoomIn = true;
-        } else {
-          isZoomIn = false;
-        }
-
-        zoomTarget += delta / 100 / 50 / speedModifier; // delta is +/- 100
-        zoomTarget = Math.min(Math.max(zoomTarget, 0), 1); // Force between 0 and 1
-        camZoomSnappedOnSat = false;
-
-        if (cameraType.current === cameraType.PLANETARIUM || cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current === cameraType.ASTRONOMY) {
-          settingsManager.fieldOfView += delta * 0.0002;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.PLANETARIUM || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          // settingsManager.fieldOfView += delta * 0.0002;
           $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
           if (settingsManager.fieldOfView > settingsManager.fieldOfViewMax) settingsManager.fieldOfView = settingsManager.fieldOfViewMax;
           if (settingsManager.fieldOfView < settingsManager.fieldOfViewMin) settingsManager.fieldOfView = settingsManager.fieldOfViewMin;
@@ -336,21 +307,6 @@ var isAnalysisMenuOpen = false;
         }
       });
       canvasDOM2.on("mousedown", function (evt) {
-        if (speedModifier === 1) {
-          settingsManager.cameraMovementSpeed = 0.002;
-          settingsManager.cameraMovementSpeedMin = 0.005;
-        }
-
-        dragPoint = getEarthScreenPoint(mouseX, mouseY);
-        try {
-          latLon = satellite.eci2ll(dragPoint.point.x, dragPoint.point.y, dragPoint.point.z);
-        } catch (e) {
-          latLon = null;
-        }
-        screenDragPoint = [mouseX, mouseY];
-        dragStartPitch = camPitch;
-        dragStartYaw = camYaw;
-        // debugLine.set(dragPoint, getCamPos());
         isDragging = true;
         camSnapMode = false;
         rightBtnMenuDOM.hide();
@@ -360,29 +316,15 @@ var isAnalysisMenuOpen = false;
         uiManager.updateURL();
       });
       canvasDOM2.on('touchstart', function (evt) {
-        settingsManager.cameraMovementSpeed = 0.0001;
-        settingsManager.cameraMovementSpeedMin = 0.0001;
-        if (evt.originalEvent.touches.length > 1) { // Two Finger Touch
-            isPinching = true;
-            startPinchDistance = Math.hypot(
-              evt.originalEvent.touches[0].pageX - evt.originalEvent.touches[1].pageX,
-              evt.originalEvent.touches[0].pageY - evt.originalEvent.touches[1].pageY);
-        } else { // Single Finger Touch
-          mouseX = evt.originalEvent.touches[0].clientX;
-          mouseY = evt.originalEvent.touches[0].clientY;
-          mouseSat = getSatIdFromCoord(mouseX, mouseY);
-          settingsManager.cameraMovementSpeed = Math.max(0.005 * zoomLevel, settingsManager.cameraMovementSpeedMin);
-          screenDragPoint = [mouseX, mouseY];
-          dragPoint = screenDragPoint; // Ignore the earth on mobile
-          dragStartPitch = camPitch;
-          dragStartYaw = camYaw;
-          isDragging = true;
-          touchStartTime = Date.now();
-          camSnapMode = false;
+        mouseX = evt.originalEvent.touches[0].clientX;
+        mouseY = evt.originalEvent.touches[0].clientY;
+        mouseSat = getSatIdFromCoord(mouseX, mouseY);
+        isDragging = true;
+        touchStartTime = Date.now();
+        camSnapMode = false;
 
-          // TODO: Make updateUrl() a setting that is disabled by default
-          uiManager.updateURL();
-        }
+        // TODO: Make updateUrl() a setting that is disabled by default
+        uiManager.updateURL();
       });
       canvasDOM2.on("mouseup", function (evt) {
         if (!dragHasMoved) {
@@ -391,7 +333,7 @@ var isAnalysisMenuOpen = false;
           }
           clickedSat = mouseSat;
           if (evt.button === 0) { // Left Mouse Button Clicked
-            if (cameraType.current === cameraType.SATELLITE) {
+            if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE) {
               if (clickedSat !== -1 && !satSet.getSatExtraOnly(clickedSat).static) { selectSat(clickedSat); }
             } else {
               selectSat(clickedSat);
@@ -405,6 +347,15 @@ var isAnalysisMenuOpen = false;
         settingsManager.themes.retheme();
         // Force the serach bar to get repainted because it gets overwrote a lot
         settingsManager.themes.redThemeSearch();
+        dragHasMoved = false;
+        isDragging = false;
+      });
+      canvasDOM2.on('touchend', function (evt) {
+        if (isPinching) {
+          isPinching = false;
+        }
+        mouseY = 0;
+        mouseX = 0;
         dragHasMoved = false;
         isDragging = false;
       });
@@ -495,8 +446,14 @@ var isAnalysisMenuOpen = false;
         }
 
         // Is this the Earth?
-        //
-        // This not the Earth
+        let earthPoint = getEarthScreenPoint(mouseX,mouseY);
+        if (typeof earthPoint == 'undefined') {
+          // This not the Earth
+          latLon = null;
+        } else {
+          let earthPointEci = canvasSpace2Eci(getEarthScreenPoint(mouseX,mouseY).point);
+          latLon = satellite.eci2ll(earthPointEci.x,earthPointEci.y,earthPointEci.z);
+        }
 
         if (latLon == null) {
         } else { // This is the Earth
@@ -552,25 +509,6 @@ var isAnalysisMenuOpen = false;
           top: mouseY + offsetY
         });
       }
-
-      canvasDOM2.on('touchend', function (evt) {
-        let touchTime = (Date.now() - touchStartTime);
-
-        if (touchTime > 250) {
-          // TODO: Implement touchscreen rmb
-          // _openRmbMenu();
-          mouseSat = -1;
-        }
-
-        if (isPinching) {
-            // pinchEnd(e);
-            isPinching = false;
-        }
-        mouseY = 0;
-        mouseX = 0;
-        dragHasMoved = false;
-        isDragging = false;
-      });
 
       $('#nav-wrapper *').on("click", function (evt) { _hidePopUps(); });
       $('#nav-wrapper').on("click", function (evt) { _hidePopUps(); });
@@ -788,7 +726,7 @@ var isAnalysisMenuOpen = false;
             settingsManager.hiresNoCloudsImages = false;
             settingsManager.vectorImages = false;
             localStorage.setItem("lastMap", 'nasa');
-            earth.init();
+            canvasManager.updateEarthTexture();
             break;
           case 'earth-nasa-rmb':
             settingsManager.blueImages = false;
@@ -799,7 +737,7 @@ var isAnalysisMenuOpen = false;
             settingsManager.hiresNoCloudsImages = false;
             settingsManager.vectorImages = false;
             localStorage.setItem("lastMap", 'nasa');
-            earth.init();
+            canvasManager.updateEarthTexture();
             break;
           case 'earth-trusat-rmb':
             settingsManager.blueImages = false;
@@ -810,7 +748,7 @@ var isAnalysisMenuOpen = false;
             settingsManager.hiresNoCloudsImages = false;
             settingsManager.vectorImages = false;
             localStorage.setItem("lastMap", 'trusat');
-            earth.init();
+            canvasManager.updateEarthTexture();
             break;
           case 'earth-low-rmb':
             settingsManager.blueImages = false;
@@ -821,7 +759,7 @@ var isAnalysisMenuOpen = false;
             settingsManager.hiresNoCloudsImages = false;
             settingsManager.vectorImages = false;
             localStorage.setItem("lastMap", 'low');
-            earth.init();
+            canvasManager.updateEarthTexture();
             break;
           case 'earth-high-rmb':
             $('#loading-screen').fadeIn('slow', function () {
@@ -833,7 +771,7 @@ var isAnalysisMenuOpen = false;
               settingsManager.hiresNoCloudsImages = false;
               settingsManager.vectorImages = false;
               localStorage.setItem("lastMap", 'high');
-              earth.init();
+              canvasManager.updateEarthTexture();
               $('#loading-screen').fadeOut();
             });
             break;
@@ -847,7 +785,7 @@ var isAnalysisMenuOpen = false;
               settingsManager.hiresNoCloudsImages = true;
               settingsManager.vectorImages = false;
               localStorage.setItem("lastMap", 'high-nc');
-              earth.init();
+              canvasManager.updateEarthTexture();
               $('#loading-screen').fadeOut();
             });
             break;
@@ -860,7 +798,7 @@ var isAnalysisMenuOpen = false;
             settingsManager.hiresNoCloudsImages = false;
             settingsManager.vectorImages = true;
             localStorage.setItem("lastMap", 'vec');
-            earth.init();
+            canvasManager.updateEarthTexture();
             break;
           case 'clear-screen-rmb':
             (function clearScreenRMB () {
@@ -868,7 +806,7 @@ var isAnalysisMenuOpen = false;
               isMilSatSelected = false;
               $('#menu-space-stations').removeClass('bmenu-item-selected');
 
-              if ((!objectManager.isSensorManagerLoaded || sensorManager.checkSensorSelected()) && cameraType.current !== cameraType.PLANETARIUM && cameraType.current !== cameraType.ASTRONOMY) {
+              if ((!objectManager.isSensorManagerLoaded || sensorManager.checkSensorSelected()) && canvasManager.cameraManager.cameraType.current !== canvasManager.cameraManager.cameraType.PLANETARIUM && canvasManager.cameraManager.cameraType.current !== canvasManager.cameraManager.cameraType.ASTRONOMY) {
                 uiManager.legendMenuChange('default');
               }
 
@@ -2725,12 +2663,9 @@ var isAnalysisMenuOpen = false;
         // selectSat(-1);
         lat = lat * 1;
         lon = lon * 1;
-        if (maxrange > 6000) {
-          changeZoom('geo');
-        } else {
-          changeZoom('leo');
-        }
-        camSnap(latToPitch(lat), longToYaw(lon));
+        rotateToLLA(lat,lon,maxrange * 1);
+        canvasManager.controls.autoRotate = false;
+        uiManager.getsensorinfo();
 
         e.preventDefault();
       });
@@ -3563,10 +3498,12 @@ var isAnalysisMenuOpen = false;
         case 'menu-day-night': // No Keyboard Commands
           if (isDayNightToggle) {
             isDayNightToggle = false;
+            canvasManager.earthNightToggle();
             $('#menu-day-night').removeClass('bmenu-item-selected');
             break;
           } else {
             isDayNightToggle = true;
+            canvasManager.earthNightToggle();
             $('#menu-day-night').addClass('bmenu-item-selected');
             break;
           }
@@ -3639,13 +3576,13 @@ var isAnalysisMenuOpen = false;
             isPlanetariumView = false;
             uiManager.hideSideMenus();
             orbitDisplay.clearInViewOrbit(); // Clear Orbits if Switching from Planetarium View
-            cameraType.current = cameraType.DEFAULT; // Back to normal Camera Mode
+            canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.DEFAULT; // Back to normal Camera Mode
             $('#fov-text').html('');
             $('#menu-planetarium').removeClass('bmenu-item-selected');
             break;
           } else {
             if (sensorManager.checkSensorSelected()) {
-              cameraType.current = cameraType.PLANETARIUM; // Activate Planetarium Camera Mode
+              canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.PLANETARIUM; // Activate Planetarium Camera Mode
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
               uiManager.legendMenuChange('planetarium');
               if (objectManager.isStarManagerLoaded) {
@@ -3668,7 +3605,7 @@ var isAnalysisMenuOpen = false;
           if (isAstronomyView) {
             isAstronomyView = false;
             uiManager.hideSideMenus();
-            cameraType.current = cameraType.DEFAULT; // Back to normal Camera Mode
+            canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.DEFAULT; // Back to normal Camera Mode
             uiManager.legendMenuChange('default');
             if (objectManager.isStarManagerLoaded) {
               starManager.clearConstellations();
@@ -3683,7 +3620,7 @@ var isAnalysisMenuOpen = false;
                 starManager.drawAllConstellations();
               }
               orbitDisplay.clearInViewOrbit();
-              cameraType.current = cameraType.ASTRONOMY; // Activate Astronomy Camera Mode
+              canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.ASTRONOMY; // Activate Astronomy Camera Mode
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
               uiManager.legendMenuChange('astronomy');
               isPlanetariumView = false;
@@ -3699,15 +3636,15 @@ var isAnalysisMenuOpen = false;
           }
           break;
         case 'menu-satview':
-          if (cameraType.current === cameraType.SATELLITE) {
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE) {
             isSatView = false;
             uiManager.hideSideMenus();
-            cameraType.current = cameraType.DEFAULT; // Back to normal Camera Mode
+            canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.DEFAULT; // Back to normal Camera Mode
             $('#menu-satview').removeClass('bmenu-item-selected');
             break;
           } else {
             if (selectedSat !== -1) {
-              cameraType.current = cameraType.SATELLITE; // Activate Satellite Camera Mode
+              canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.SATELLITE; // Activate Satellite Camera Mode
               $('#menu-satview').addClass('bmenu-item-selected');
               isSatView = true;
             } else {
@@ -3876,7 +3813,7 @@ var isAnalysisMenuOpen = false;
         saveWatchlist[i] = sat.SCC_NUM;
       }
       var variable = JSON.stringify(saveWatchlist);
-      if (!settingsManager.offline) { localStorage.setItem("watchlistList", variable); }
+      if (!settingsManager.unofficialSite) { localStorage.setItem("watchlistList", variable); }
     };
 
     var isCurrentlyTyping = false;
@@ -3902,39 +3839,39 @@ var isAnalysisMenuOpen = false;
       db.log('_keyUpHandler');
       if (isCurrentlyTyping) return;
 
-      if (evt.key.toUpperCase() === 'A' && fpsSideSpeed === -settingsManager.fpsSideSpeed) {
-        isFPSSideSpeedLock = false;
+      if (evt.key.toUpperCase() === 'A' && uiManager.keyManager.fpsSideSpeed === -settingsManager.uiManager.keyManager.fpsSideSpeed) {
+        uiManager.keyManager.isfpsSideSpeedLock = false;
       }
-      if (evt.key.toUpperCase() === 'D' && fpsSideSpeed === settingsManager.fpsSideSpeed) {
-        isFPSSideSpeedLock = false;
+      if (evt.key.toUpperCase() === 'D' && uiManager.keyManager.fpsSideSpeed === settingsManager.uiManager.keyManager.fpsSideSpeed) {
+        uiManager.keyManager.isfpsSideSpeedLock = false;
       }
-      if (evt.key.toUpperCase() === 'S' && fpsForwardSpeed === -settingsManager.fpsForwardSpeed) {
-        isFPSForwardSpeedLock = false;
+      if (evt.key.toUpperCase() === 'S' && uiManager.keyManager.fpsForwardSpeed === -settingsManager.uiManager.keyManager.fpsForwardSpeed) {
+        uiManager.keyManager.isfpsForwardSpeedLock = false;
       }
-      if (evt.key.toUpperCase() === 'W' && fpsForwardSpeed === settingsManager.fpsForwardSpeed) {
-        isFPSForwardSpeedLock = false;
+      if (evt.key.toUpperCase() === 'W' && uiManager.keyManager.fpsForwardSpeed === settingsManager.uiManager.keyManager.fpsForwardSpeed) {
+        uiManager.keyManager.isfpsForwardSpeedLock = false;
       }
       if (evt.key.toUpperCase() === 'Q') {
-        if (fpsVertSpeed === -settingsManager.fpsVertSpeed) isFPSVertSpeedLock = false;
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsYawRate = 0;
+        if (uiManager.keyManager.fpsVertSpeed === -settingsManager.uiManager.keyManager.fpsVertSpeed) uiManager.keyManager.isfpsVertSpeedLock = false;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsYawRate = 0;
         } else {
-          fpsRotateRate = 0;
+          uiManager.keyManager.fpsRotateRate = 0;
         }
       }
       if (evt.key.toUpperCase() === 'E') {
-        if (fpsVertSpeed === settingsManager.fpsVertSpeed) isFPSVertSpeedLock = false;
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsYawRate = 0;
+        if (uiManager.keyManager.fpsVertSpeed === settingsManager.uiManager.keyManager.fpsVertSpeed) uiManager.keyManager.isfpsVertSpeedLock = false;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsYawRate = 0;
         } else {
-          fpsRotateRate = 0;
+          uiManager.keyManager.fpsRotateRate = 0;
         }
       }
       if (evt.key.toUpperCase() === 'J' || evt.key.toUpperCase() === 'L') {
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsRotateRate = 0;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsRotateRate = 0;
         } else {
-          fpsYawRate = 0;
+          uiManager.keyManager.fpsYawRate = 0;
         }
       }
       if (evt.key.toUpperCase() === 'I' || evt.key.toUpperCase() === 'K') {
@@ -3942,21 +3879,21 @@ var isAnalysisMenuOpen = false;
       }
 
       if (evt.key.toUpperCase() === 'SHIFT') {
-        fpsRun = 1;
+        uiManager.keyManager.fpsRun = 1;
         settingsManager.cameraMovementSpeed = 0.003;
         settingsManager.cameraMovementSpeedMin = 0.005;
-        speedModifier = 1;
-        if (!isFPSForwardSpeedLock) fpsForwardSpeed = 0;
-        if (!isFPSSideSpeedLock) fpsSideSpeed = 0;
-        if (!isFPSVertSpeedLock) fpsVertSpeed = 0;
+        uiManager.keyManager.speedModifier = 1;
+        if (!uiManager.keyManager.isfpsForwardSpeedLock) uiManager.keyManager.fpsForwardSpeed = 0;
+        if (!uiManager.keyManager.isfpsSideSpeedLock) uiManager.keyManager.fpsSideSpeed = 0;
+        if (!uiManager.keyManager.isfpsVertSpeedLock) uiManager.keyManager.fpsVertSpeed = 0;
       }
       // TODO: Find evt.key === 'ShiftRight' alternative for IE
       // Applies to _keyDownHandler as well
       if (evt.key === 'ShiftRight') {
-        fpsRun = 1;
+        uiManager.keyManager.fpsRun = 1;
         settingsManager.cameraMovementSpeed = 0.003;
         settingsManager.cameraMovementSpeedMin = 0.005;
-        speedModifier = 1;
+        uiManager.keyManager.speedModifier = 1;
       }
     }
 
@@ -3964,90 +3901,90 @@ var isAnalysisMenuOpen = false;
       db.log('_keyDownHandler');
       if (isCurrentlyTyping) return;
       if (evt.key.toUpperCase() === 'SHIFT') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsRun = 0.05;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsRun = 0.05;
         }
-        speedModifier = 8;
+        uiManager.keyManager.speedModifier = 8;
         settingsManager.cameraMovementSpeed = 0.003 / 8;
         settingsManager.cameraMovementSpeedMin = 0.005 / 8;
       }
       if (evt.key === 'ShiftRight') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsRun = 3;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsRun = 3;
         }
       }
       if (evt.key.toUpperCase() === 'W') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsForwardSpeed = settingsManager.fpsForwardSpeed;
-          isFPSForwardSpeedLock = true;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsForwardSpeed = settingsManager.uiManager.keyManager.fpsForwardSpeed;
+          uiManager.keyManager.isfpsForwardSpeedLock = true;
         }
       }
       if (evt.key.toUpperCase() === 'A') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsSideSpeed = -settingsManager.fpsSideSpeed;
-          isFPSSideSpeedLock = true;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsSideSpeed = -settingsManager.uiManager.keyManager.fpsSideSpeed;
+          uiManager.keyManager.isfpsSideSpeedLock = true;
         }
       }
       if (evt.key.toUpperCase() === 'S') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsForwardSpeed = -settingsManager.fpsForwardSpeed;
-          isFPSForwardSpeedLock = true;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsForwardSpeed = -settingsManager.uiManager.keyManager.fpsForwardSpeed;
+          uiManager.keyManager.isfpsForwardSpeedLock = true;
         }
       }
       if (evt.key.toUpperCase() === 'D') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsSideSpeed = settingsManager.fpsSideSpeed;
-          isFPSSideSpeedLock = true;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsSideSpeed = settingsManager.uiManager.keyManager.fpsSideSpeed;
+          uiManager.keyManager.isfpsSideSpeedLock = true;
         }
       }
       if (evt.key.toUpperCase() === 'I') {
-        if (cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current === cameraType.ASTRONOMY) {
-          fpsPitchRate = settingsManager.fpsPitchRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          fpsPitchRate = settingsManager.fpsPitchRate / uiManager.keyManager.speedModifier;
         }
       }
       if (evt.key.toUpperCase() === 'K') {
-        if (cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE || cameraType.current === cameraType.ASTRONOMY) {
-          fpsPitchRate = -settingsManager.fpsPitchRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          fpsPitchRate = -settingsManager.fpsPitchRate / uiManager.keyManager.speedModifier;
         }
       }
       if (evt.key.toUpperCase() === 'J') {
-        if (cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE) {
-          fpsYawRate = -settingsManager.fpsYawRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE) {
+          uiManager.keyManager.fpsYawRate = -settingsManager.uiManager.keyManager.fpsYawRate / uiManager.keyManager.speedModifier;
         }
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsRotateRate = settingsManager.fpsRotateRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsRotateRate = settingsManager.uiManager.keyManager.fpsRotateRate / uiManager.keyManager.speedModifier;
         }
       }
       if (evt.key.toUpperCase() === 'L') {
-        if (cameraType.current === cameraType.FPS || cameraType.current === cameraType.SATELLITE) {
-          fpsYawRate = settingsManager.fpsYawRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS || canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE) {
+          uiManager.keyManager.fpsYawRate = settingsManager.uiManager.keyManager.fpsYawRate / uiManager.keyManager.speedModifier;
         }
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsRotateRate = -settingsManager.fpsRotateRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsRotateRate = -settingsManager.uiManager.keyManager.fpsRotateRate / uiManager.keyManager.speedModifier;
         }
       }
       if (evt.key.toUpperCase() === 'Q') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsVertSpeed = -settingsManager.fpsVertSpeed;
-          isFPSVertSpeedLock = true;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsVertSpeed = -settingsManager.uiManager.keyManager.fpsVertSpeed;
+          uiManager.keyManager.isfpsVertSpeedLock = true;
         }
-        if (cameraType.current === cameraType.SATELLITE) {
-          fpsRotateRate = settingsManager.fpsRotateRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE) {
+          uiManager.keyManager.fpsRotateRate = settingsManager.uiManager.keyManager.fpsRotateRate / uiManager.keyManager.speedModifier;
         }
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsYawRate = -settingsManager.fpsYawRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsYawRate = -settingsManager.uiManager.keyManager.fpsYawRate / uiManager.keyManager.speedModifier;
         }
       }
       if (evt.key.toUpperCase() === 'E') {
-        if (cameraType.current === cameraType.FPS) {
-          fpsVertSpeed = settingsManager.fpsVertSpeed;
-          isFPSVertSpeedLock = true;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+          uiManager.keyManager.fpsVertSpeed = settingsManager.uiManager.keyManager.fpsVertSpeed;
+          uiManager.keyManager.isfpsVertSpeedLock = true;
       }
-        if (cameraType.current === cameraType.SATELLITE) {
-          fpsRotateRate = -settingsManager.fpsRotateRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE) {
+          uiManager.keyManager.fpsRotateRate = -settingsManager.uiManager.keyManager.fpsRotateRate / uiManager.keyManager.speedModifier;
         }
-        if (cameraType.current === cameraType.ASTRONOMY) {
-          fpsYawRate = settingsManager.fpsYawRate / speedModifier;
+        if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY) {
+          uiManager.keyManager.fpsYawRate = settingsManager.uiManager.keyManager.fpsYawRate / uiManager.keyManager.speedModifier;
         }
       }
     }
@@ -4061,23 +3998,37 @@ var isAnalysisMenuOpen = false;
           canvasManager.controls.autoRotate = !canvasManager.controls.autoRotate;
           break;
         case 'C':
-          if (cameraType.current === cameraType.PLANETARIUM) orbitDisplay.clearInViewOrbit(); // Clear Orbits if Switching from Planetarium View
+          // DISABLED ALL CAMERA CHANGES FOR NOW
+          return;
 
-          cameraType.current += 1;
-          if (cameraType.current === cameraType.PLANETARIUM && (!objectManager.isSensorManagerLoaded || !sensorManager.checkSensorSelected())) {
-            cameraType.current += 1;
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.PLANETARIUM) orbitDisplay.clearInViewOrbit(); // Clear Orbits if Switching from Planetarium View
+
+          canvasManager.cameraManager.cameraType.current += 1;
+
+          // DISABLED OFFSET MODE FOR NOW
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.OFFSET) {
+            canvasManager.cameraManager.cameraType.current += 1;
           }
 
-          if (cameraType.current === cameraType.SATELLITE && selectedSat === -1) {
-            cameraType.current += 1;
+          // DISABLED FPS MODE FOR NOW
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.FPS) {
+            canvasManager.cameraManager.cameraType.current += 1;
           }
 
-          if (cameraType.current === cameraType.ASTRONOMY && (!objectManager.isSensorManagerLoaded || !sensorManager.checkSensorSelected())) {
-            cameraType.current += 1;
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.PLANETARIUM && (!objectManager.isSensorManagerLoaded || !sensorManager.checkSensorSelected())) {
+            canvasManager.cameraManager.cameraType.current += 1;
           }
 
-          if (cameraType.current === 6) { // 6 is a placeholder to reset camera type
-            cameraType.current = 0;
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.SATELLITE && selectedSat === -1) {
+            canvasManager.cameraManager.cameraType.current += 1;
+          }
+
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.ASTRONOMY && (!objectManager.isSensorManagerLoaded || !sensorManager.checkSensorSelected())) {
+            canvasManager.cameraManager.cameraType.current += 1;
+          }
+
+          if (canvasManager.cameraManager.cameraType.current === 6) { // 6 is a placeholder to reset camera type
+            canvasManager.cameraManager.cameraType.current = 0;
             fpsPitch = 0;
             fpsYaw = 0;
             fpsXPos = 0;
@@ -4085,40 +4036,43 @@ var isAnalysisMenuOpen = false;
             fpsZPos = 0;
           }
 
-          switch (cameraType.current) {
-            case cameraType.DEFAULT:
+          switch (canvasManager.cameraManager.cameraType.current) {
+            case canvasManager.cameraManager.cameraType.DEFAULT:
               $('#camera-status-box').html('Earth Centered Camera Mode');
               $('#fov-text').html('');
               zoomLevel = 0.5;
+              canvasManager.cameraManager.targetPosition = null;
               canvasManager.camera.position.x = 0;
               canvasManager.camera.position.y = 0;
-              canvasManager.camera.position.z =_getCamDist();
+              canvasManager.camera.position.z = settingsManager.canvasManager.defaultCameraDistanceFromEarth;
               canvasManager.camera.lookAt(0,0,0);
+              // canvasManager.controls.target = {x:0,y:0,z:0};
+              canvasManager.objects.atmosphere.visible = true;
               break;
-            case cameraType.OFFSET:
+            case canvasManager.cameraManager.cameraType.OFFSET:
+              // Needs Reworked Later
               $('#camera-status-box').html('Offset Camera Mode');
               $('#fov-text').html('');
-              canvasManager.camera.position.x = -15000;
-              canvasManager.camera.position.y = 6000;
-              canvasManager.camera.position.z =_getCamDist();
+              canvasManager.controls.target = new THREE.Vector3(7500,3000,0);
+              canvasManager.camera.position.z = settingsManager.canvasManager.defaultCameraDistanceFromEarth;
               break;
-            case cameraType.FPS:
+            case canvasManager.cameraManager.cameraType.FPS:
               $('#camera-status-box').html('Free Camera Mode');
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
               fpsXPos = canvasManager.camera.position.x;
               fpsYPos = canvasManager.camera.position.z;
               fpsZPos = canvasManager.camera.position.y;
               break;
-            case cameraType.PLANETARIUM:
+            case canvasManager.cameraManager.cameraType.PLANETARIUM:
               $('#camera-status-box').html('Planetarium Camera Mode');
               uiManager.legendMenuChange('planetarium');
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
               break;
-            case cameraType.SATELLITE:
+            case canvasManager.cameraManager.cameraType.SATELLITE:
               $('#camera-status-box').html('Satellite Camera Mode');
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
               break;
-            case cameraType.ASTRONOMY:
+            case canvasManager.cameraManager.cameraType.ASTRONOMY:
               $('#camera-status-box').html('Astronomy Camera Mode');
               uiManager.legendMenuChange('astronomy');
               $('#fov-text').html('FOV: ' + (settingsManager.fieldOfView * 100).toFixed(2) + ' deg');
@@ -4131,79 +4085,79 @@ var isAnalysisMenuOpen = false;
           break;
         }
 
-        switch (evt.key) {
-        case '!':
-          timeManager.propOffset = 0; // Reset to Current Time
-          settingsManager.isPropRateChange = true;
-          break;
-        case ',':
-          timeManager.propOffset -= 1000 * 60; // Move back a Minute
-          settingsManager.isPropRateChange = true;
-          $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
-          break;
-        case '.':
-          timeManager.propOffset += 1000 * 60; // Move a Minute
-          settingsManager.isPropRateChange = true;
-          $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
-          break;
-        case '<':
-          timeManager.propOffset -= 1000 * 60 * 60 * 24 * 365.25; // Move back a year
-          settingsManager.isPropRateChange = true;
-          $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
-          break;
-        case '>':
-          timeManager.propOffset += 1000 * 60 * 60 * 24 * 365.25; // Move forward a year
-          settingsManager.isPropRateChange = true;
-          $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
-          break;
-        case '0':
-          timeManager.setPropRateZero();
-          timeManager.propOffset = timeManager.getPropOffset();
-          settingsManager.isPropRateChange = true;
-          break;
-        case '+':
-        case '=':
-          if (timeManager.propRate < 0.001 && timeManager.propRate > -0.001) {
-            timeManager.propRate = 0.001;
-          }
+      switch (evt.key) {
+      case '!':
+        timeManager.propOffset = 0; // Reset to Current Time
+        settingsManager.isPropRateChange = true;
+        break;
+      case ',':
+        timeManager.propOffset -= 1000 * 60; // Move back a Minute
+        settingsManager.isPropRateChange = true;
+        $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
+        break;
+      case '.':
+        timeManager.propOffset += 1000 * 60; // Move a Minute
+        settingsManager.isPropRateChange = true;
+        $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
+        break;
+      case '<':
+        timeManager.propOffset -= 1000 * 60 * 60 * 24 * 365.25; // Move back a year
+        settingsManager.isPropRateChange = true;
+        $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
+        break;
+      case '>':
+        timeManager.propOffset += 1000 * 60 * 60 * 24 * 365.25; // Move forward a year
+        settingsManager.isPropRateChange = true;
+        $('#datetime-input-tb').datepicker('setDate', new Date(timeManager.propRealTime + timeManager.propOffset));
+        break;
+      case '0':
+        timeManager.setPropRateZero();
+        timeManager.propOffset = timeManager.getPropOffset();
+        settingsManager.isPropRateChange = true;
+        break;
+      case '+':
+      case '=':
+        if (timeManager.propRate < 0.001 && timeManager.propRate > -0.001) {
+          timeManager.propRate = 0.001;
+        }
 
-          if (timeManager.propRate > 1000) {
-            timeManager.propRate = 1000;
-          }
+        if (timeManager.propRate > 1000) {
+          timeManager.propRate = 1000;
+        }
 
-          if (timeManager.propRate < 0) {
-            timeManager.propRate *= 0.666666;
-          } else {
-            timeManager.propRate *= 1.5;
-          }
-          timeManager.propOffset = timeManager.getPropOffset();
-          settingsManager.isPropRateChange = true;
-          break;
-        case '-':
-        case '_':
-          if (timeManager.propRate < 0.001 && timeManager.propRate > -0.001) {
-            timeManager.propRate = -0.001;
-          }
+        if (timeManager.propRate < 0) {
+          timeManager.propRate *= 0.666666;
+        } else {
+          timeManager.propRate *= 1.5;
+        }
+        timeManager.propOffset = timeManager.getPropOffset();
+        settingsManager.isPropRateChange = true;
+        break;
+      case '-':
+      case '_':
+        if (timeManager.propRate < 0.001 && timeManager.propRate > -0.001) {
+          timeManager.propRate = -0.001;
+        }
 
-          if (timeManager.propRate < -1000) {
-            timeManager.propRate = -1000;
-          }
+        if (timeManager.propRate < -1000) {
+          timeManager.propRate = -1000;
+        }
 
-          if (timeManager.propRate > 0) {
-            timeManager.propRate *= 0.666666;
-          } else {
-            timeManager.propRate *= 1.5;
-          }
+        if (timeManager.propRate > 0) {
+          timeManager.propRate *= 0.666666;
+        } else {
+          timeManager.propRate *= 1.5;
+        }
 
-          timeManager.propOffset = timeManager.getPropOffset();
-          settingsManager.isPropRateChange = true;
-          break;
-        case '1':
-          timeManager.propRate = 1.0;
-          timeManager.propOffset = timeManager.getPropOffset();
-          settingsManager.isPropRateChange = true;
-          break;
-      }
+        timeManager.propOffset = timeManager.getPropOffset();
+        settingsManager.isPropRateChange = true;
+        break;
+      case '1':
+        timeManager.propRate = 1.0;
+        timeManager.propOffset = timeManager.getPropOffset();
+        settingsManager.isPropRateChange = true;
+        break;
+    }
 
       if (settingsManager.isPropRateChange) {
         satCruncher.postMessage({
@@ -4636,12 +4590,9 @@ var isAnalysisMenuOpen = false;
         selectSat(-1);
         lat = lat * 1;
         lon = lon * 1;
-        if (maxrange > 6000) {
-          changeZoom('geo');
-        } else {
-          changeZoom('leo');
-        }
-        camSnap(latToPitch(lat), longToYaw(lon));
+        rotateToLLA(lat,lon,maxrange);
+        canvasManager.controls.autoRotate = false;
+        uiManager.getsensorinfo();
       });
     }
   };
@@ -5057,6 +5008,8 @@ var isAnalysisMenuOpen = false;
     $('#menu-planetarium').addClass('bmenu-item-disabled');
     $('#menu-astronomy').addClass('bmenu-item-disabled');
 
+    sensorManager.setSensor(null,null);
+
     setTimeout(function(){ satSet.setColorScheme(settingsManager.currentColorScheme, true); }, 2000);
   };
 
@@ -5247,7 +5200,7 @@ var isAnalysisMenuOpen = false;
     }
 
     debugDrawLine('ref',[sat.position.x,sat.position.y,sat.position.z], [1,0.4,0,1]);
-    cameraType.current = cameraType.OFFSET;
+    canvasManager.cameraManager.cameraType.current = canvasManager.cameraManager.cameraType.OFFSET;
     console.log(sat);
     // ======================================================
     // Need to calculate the time to get the right RA offset

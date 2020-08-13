@@ -21,11 +21,8 @@ for derivative works, or offered for sale, or used to construct any kind of data
 or mirrored at any other location without the express written permission of the author.
 
 ///////////////////////////////////////////////////////////////////////////// */
-var debugTimeArray = [];
-
 var timeManager = window.timeManager;
 var satCruncher = window.satCruncher;
-var gl;
 
 // Camera Variables
 var camYaw = 0;
@@ -33,8 +30,6 @@ var camPitch = 0;
 var camYawTarget = 0;
 var camPitchTarget = 0;
 var camSnapMode = false;
-var camZoomSnappedOnSat = false;
-var camAngleSnappedOnSat = false;
 var zoomLevel = 0.6;
 var zoomTarget = 0.6;
 var isZoomIn = false;
@@ -59,10 +54,6 @@ var isCustomSensorMenuOpen = false;
 var pitchRotate;
 var yawRotate;
 
-var pickFb, pickTex;
-var pMatrix = mat4.create();
-var camMatrix = mat4.create();
-var camMatrixEmpty = mat4.create();
 var selectedSat = -1;
 var lastSelectedSat = -1;
 
@@ -70,16 +61,6 @@ var drawLineList = [];
 
 var updateHoverDelay = 0;
 var updateHoverDelayLimit = 1;
-
-var pickColorBuf;
-var cameraType = {};
-cameraType.current = 0;
-cameraType.DEFAULT = 0;
-cameraType.OFFSET = 1;
-cameraType.FPS = 2;
-cameraType.PLANETARIUM = 3;
-cameraType.SATELLITE = 4;
-cameraType.ASTRONOMY = 5;
 
 var mouseX = 0;
 var mouseY = 0;
@@ -96,26 +77,6 @@ var dragHasMoved = false;
 var isPinching = false;
 var deltaPinchDistance = 0;
 var startPinchDistance = 0;
-
-var fpsEl;
-var fpsAz;
-var fpsPitch = 0;
-var fpsPitchRate = 0;
-var fpsRotate = 0;
-var fpsRotateRate = 0;
-var fpsYaw = 0;
-var fpsYawRate = 0;
-var fpsXPos = 0;
-var fpsYPos = 25000;
-var fpsZPos = 0;
-var fpsForwardSpeed = 0;
-var fpsSideSpeed = 0;
-var fpsVertSpeed = 0;
-var isFPSForwardSpeedLock = false;
-var isFPSSideSpeedLock = false;
-var isFPSVertSpeedLock = false;
-var fpsRun = 1;
-var fpsLastTime = 1;
 
 var satScreenPositionArray = {};
 var isShowNextPass = false;
@@ -158,30 +119,8 @@ var drawLoopCallback;
         satSet.onCruncherReady();
 
         setTimeout(function () {
-          (function _reloadLastSensor () {
-            let currentSensor = JSON.parse(localStorage.getItem("currentSensor"));
-            if (currentSensor !== null) {
-              try {
-                // If there is a staticnum set use that
-                if (typeof currentSensor[0] == 'undefined' || currentSensor[0] == null) {
-                  sensorManager.setSensor(null, currentSensor[1]);
-                } else {
-                  // If the sensor is a string, load that collection of sensors
-                  if (typeof currentSensor[0].shortName == 'undefined') {
-                    sensorManager.setSensor(currentSensor[0], currentSensor[1]);
-                  } else {
-                    // Seems to be a single sensor without a staticnum, load that
-                    sensorManager.setSensor(sensorManager.sensorList[currentSensor[0].shortName], currentSensor[1]);
-                  }
-                }
-              }
-              catch (e){
-                console.warn('Saved Sensor Information Invalid');
-              }
-            }
-          })();
           (function _watchlistInit () {
-            var watchlistJSON = (!settingsManager.offline) ? localStorage.getItem("watchlistList") : null;
+            var watchlistJSON = (!settingsManager.unofficialSite) ? localStorage.getItem("watchlistList") : null;
             if (watchlistJSON !== null) {
               var newWatchlist = JSON.parse(watchlistJSON);
               watchlistInViewList = [];
@@ -266,6 +205,30 @@ var drawLoopCallback;
               }
             }
           })();
+          setTimeout(function () {
+            (function _reloadLastSensor () {
+            let currentSensor = JSON.parse(localStorage.getItem("currentSensor"));
+            if (currentSensor !== null) {
+              try {
+                // If there is a staticnum set use that
+                if (typeof currentSensor[0] == 'undefined' || currentSensor[0] == null) {
+                  sensorManager.setSensor(null, currentSensor[1]);
+                } else {
+                  // If the sensor is a string, load that collection of sensors
+                  if (typeof currentSensor[0].shortName == 'undefined') {
+                    sensorManager.setSensor(currentSensor[0], currentSensor[1]);
+                  } else {
+                    // Seems to be a single sensor without a staticnum, load that
+                    sensorManager.setSensor(sensorManager.sensorList[currentSensor[0].shortName], currentSensor[1]);
+                  }
+                }
+              }
+              catch (e){
+                console.warn('Saved Sensor Information Invalid');
+              }
+            }
+          })();
+          }, 1000);
 
           // NOTE:: This is called right after all the objects load on the screen.
           // Version Info Updated
@@ -321,50 +284,6 @@ var drawLoopCallback;
       })();
     });
   });
-
-
-
-  function drawLoop () {
-    return;
-    if (settingsManager.isDemoModeOn) _demoMode();
-
-    // Hide satMiniBoxes When Not in Use
-    if ((!settingsManager.isSatLabelModeOn || cameraType.current !== cameraType.PLANETARIUM)) {
-      if (isSatMiniBoxInUse) {
-        $('#sat-minibox').html('');
-      }
-      isSatMiniBoxInUse = false;
-    }
-
-  }
-  var demoModeSatellite = 0;
-  var demoModeLastTime = 0;
-  function _demoMode () {
-    if (objectManager.isSensorManagerLoaded && !sensorManager.checkSensorSelected()) return;
-    if (drawNow - demoModeLastTime < settingsManager.demoModeInterval) return;
-
-    demoModeLastTime = drawNow;
-
-    if (demoModeSatellite === satSet.getSatData().length) demoModeSatellite = 0;
-    for (var i = demoModeSatellite; i < satSet.getSatData().length; i++) {
-      var sat = satSet.getSat(i);
-      if (sat.static) continue;
-      if (sat.missile) continue;
-      // if (!sat.inview) continue;
-      if (sat.OT === 1 && ColorScheme.objectTypeFlags.payload === false) continue;
-      if (sat.OT === 2 && ColorScheme.objectTypeFlags.rocketBody === false) continue;
-      if (sat.OT === 3 && ColorScheme.objectTypeFlags.debris === false) continue;
-      if (sat.inview && ColorScheme.objectTypeFlags.inFOV === false) continue;
-      satSet.getScreenCoords(i, pMatrix, camMatrix);
-      if (satScreenPositionArray.error) continue;
-      if (typeof satScreenPositionArray.x == 'undefined' || typeof satScreenPositionArray.y == 'undefined') continue;
-      if (satScreenPositionArray.x > window.innerWidth || satScreenPositionArray.y > window.innerHeight) continue;
-      _hoverBoxOnSat(i, satScreenPositionArray.x, satScreenPositionArray.y);
-      orbitDisplay.setSelectOrbit(i);
-      demoModeSatellite = i + 1;
-      return;
-    }
-  }
 })();
 
 function getSatIdFromCoord (x, y) {
@@ -474,8 +393,6 @@ function selectSat (satId) {
       }
       return;
     }
-    camZoomSnappedOnSat = true;
-    camAngleSnappedOnSat = true;
 
     orbitDisplay.setSelectOrbit(satId);
 
@@ -494,7 +411,7 @@ function selectSat (satId) {
       if (window.innerWidth <= 1000) {
       } else {
         $('#search-results').attr('style', 'display:block; max-height:27%');
-        if (cameraType.current !== cameraType.PLANETARIUM) {
+        if (canvasManager.cameraManager.cameraType.current !== canvasManager.cameraManager.cameraType.PLANETARIUM) {
           // Unclear why this was needed...
           // uiManager.legendMenuChange('default');
         }
@@ -503,7 +420,7 @@ function selectSat (satId) {
       if (window.innerWidth <= 1000) {
       } else {
         $('#search-results').attr('style', 'max-height:27%');
-        if (cameraType.current !== cameraType.PLANETARIUM) {
+        if (canvasManager.cameraManager.cameraType.current !== canvasManager.cameraManager.cameraType.PLANETARIUM) {
           // Unclear why this was needed...
           // uiManager.legendMenuChange('default');
         }
@@ -827,130 +744,4 @@ function enableSlowCPUMode () {
   satCruncher.postMessage({
     isSlowCPUModeEnabled: true
   });
-}
-function debugDrawLine (type, value, color) {
-  if (typeof color == 'undefined') color = [1.0, 0, 1.0, 1.0];
-  switch (color) {
-    case 'r':
-      color = [1,0,0,1];
-      break;
-    case 'o':
-      color = [1,0.5,0,1];
-      break;
-    case 'y':
-      color = [1,1,0,1];
-      break;
-    case 'g':
-      color = [0,1,0,1];
-      break;
-    case 'b':
-      color = [0,0,1,1];
-      break;
-    case 'c':
-      color = [0,1,1,1];
-      break;
-    case 'p':
-      color = [1,0,1,1];
-      break;
-  }
-  if (type == 'sat') {
-    let sat = satSet.getSat(value);
-    drawLineList.push(
-      {
-        'line': new Line(),
-        'sat': sat,
-        'ref': [0,0,0],
-        'ref2': [sat.position.x, sat.position.y, sat.position.z],
-        'color': color
-      }
-    );
-  }
-  if (type == 'sat2') {
-    let sat = satSet.getSat(value[0]);
-    drawLineList.push(
-      {
-        'line': new Line(),
-        'sat': sat,
-        'ref': [value[1], value[2], value[3]],
-        'ref2': [sat.position.x, sat.position.y, sat.position.z],
-        'color': color
-      }
-    );
-  }
-  if (type == 'sat3') {
-    let sat = satSet.getSat(value[0]);
-    var sat2 = satSet.getSat(value[1]);
-    drawLineList.push(
-      {
-        'line': new Line(),
-        'sat': sat,
-        'sat2': sat2,
-        'ref': [sat.position.x, sat.position.y, sat.position.z],
-        'ref2': [sat2.position.x, sat2.position.y, sat2.position.z],
-        'color': color
-      }
-    );
-  }
-  if (type == 'ref') {
-    drawLineList.push(
-      {
-        'line': new Line(),
-        'ref': [0,0,0],
-        'ref2': [value[0], value[1], value[2]],
-        'color': color
-      }
-    );
-  }
-  if (type == 'ref2') {
-    drawLineList.push(
-      {
-        'line': new Line(),
-        'ref': [value[0], value[1], value[2]],
-        'ref2': [value[3], value[4], value[5]],
-        'color': color
-      }
-    );
-  }
-}
-
-var drawLinesI = 0;
-var tempStar1, tempStar2;
-var satPos;
-function drawLines () {
-  if (drawLineList.length == 0) return;
-  for (drawLinesI = 0; drawLinesI < drawLineList.length; drawLinesI++) {
-    if (typeof drawLineList[drawLinesI].sat != 'undefined') {
-      // At least One Satellite
-      drawLineList[drawLinesI].sat =  satSet.getSatPosOnly(drawLineList[drawLinesI].sat.id);
-      if (typeof drawLineList[drawLinesI].sat2 != 'undefined') {
-        // Satellite and Static
-        if (typeof drawLineList[drawLinesI].sat2.name != 'undefined'){
-          if (typeof  drawLineList[drawLinesI].sat2.id == 'undefined') {
-            drawLineList[drawLinesI].sat2.id = satSet.getIdFromSensorName(drawLineList[drawLinesI].sat2.name);
-          }
-          drawLineList[drawLinesI].sat2 =  satSet.getSatPosOnly(drawLineList[drawLinesI].sat2.id);
-          drawLineList[drawLinesI].line.set([drawLineList[drawLinesI].sat.position.x,drawLineList[drawLinesI].sat.position.y,drawLineList[drawLinesI].sat.position.z], [drawLineList[drawLinesI].sat2.position.x,drawLineList[drawLinesI].sat2.position.y,drawLineList[drawLinesI].sat2.position.z]);
-        } else {
-          // Two Satellites
-          drawLineList[drawLinesI].sat2 =  satSet.getSatPosOnly(drawLineList[drawLinesI].sat2.id);
-          drawLineList[drawLinesI].line.set([drawLineList[drawLinesI].sat.position.x,drawLineList[drawLinesI].sat.position.y,drawLineList[drawLinesI].sat.position.z], [drawLineList[drawLinesI].sat2.position.x,drawLineList[drawLinesI].sat2.position.y,drawLineList[drawLinesI].sat2.position.z]);
-        }
-      } else {
-        // Just One Satellite
-        drawLineList[drawLinesI].line.set(drawLineList[drawLinesI].ref, [drawLineList[drawLinesI].sat.position.x,drawLineList[drawLinesI].sat.position.y,drawLineList[drawLinesI].sat.position.z]);
-      }
-    } else if ((typeof drawLineList[drawLinesI].star1 != 'undefined') && (typeof drawLineList[drawLinesI].star2 != 'undefined')) {
-      // Constellation
-      if (typeof drawLineList[drawLinesI].star1ID == 'undefined') { drawLineList[drawLinesI].star1ID = satSet.getIdFromStarName(drawLineList[drawLinesI].star1); }
-      if (typeof drawLineList[drawLinesI].star2ID == 'undefined') { drawLineList[drawLinesI].star2ID = satSet.getIdFromStarName(drawLineList[drawLinesI].star2); }
-      tempStar1 =  satSet.getSatPosOnly(drawLineList[drawLinesI].star1ID);
-      tempStar2 =  satSet.getSatPosOnly(drawLineList[drawLinesI].star2ID);
-      drawLineList[drawLinesI].line.set([tempStar1.position.x, tempStar1.position.y, tempStar1.position.z], [tempStar2.position.x, tempStar2.position.y,tempStar2.position.z]);
-    } else {
-      // Arbitrary Lines
-      drawLineList[drawLinesI].line.set(drawLineList[drawLinesI].ref, drawLineList[drawLinesI].ref2);
-    }
-
-    drawLineList[drawLinesI].line.draw(drawLineList[drawLinesI].color);
-  }
 }

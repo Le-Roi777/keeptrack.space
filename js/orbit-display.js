@@ -59,8 +59,9 @@
     canvasManager.scene.add(orbitDisplay.hoverOrbitBuf);
 
     orbitDisplay.glBuffers = new THREE.Group();
+
     for (var i = 0; i < satSet.missileSats; i++) {
-      orbitDisplay.glBuffers.add(allocateBuffer());
+      orbitDisplay.glBuffers.add(new THREE.Line(lineBuf.clone(), orbitDisplay.materialYellow));
       orbitDisplay.glBuffers.children[i].visible = false;
     }
     canvasManager.scene.add(orbitDisplay.glBuffers);
@@ -119,6 +120,20 @@
   };
 
   orbitWorker.onmessage = function (m) {
+    // DEBUG ONLY!!!
+    // {
+    //   let test = new Float32Array(m.data.pointsOut);
+    //   for (var i = 0; i < test.length; i++) {
+    //     if (isNaN(test[i])) {
+    //       inProgress[m.data.satId] = false;
+    //       return;
+    //       // let sat = satSet.getSat(m.data.satId);
+    //       // console.log(`Sat: ${sat.SCC_NUM}`);
+    //       // console.log(test);
+    //     }
+    //   }
+    // }
+
     orbitDisplay.glBuffers.children[m.data.satId].geometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array(m.data.pointsOut), 3 ));
     orbitDisplay.glBuffers.children[m.data.satId].geometry.rotateX(-90 * DEG2RAD);
     orbitDisplay.glBuffers.children[m.data.satId].geometry.attributes.position.needsUpdate = true;
@@ -213,12 +228,12 @@
     return true;
   };
 
-  function allocateBuffer () {
-    let lineBuf = new THREE.BufferGeometry();
-    lineBuf.setAttribute('position', new THREE.BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
-    let line = new THREE.Line(lineBuf, orbitDisplay.materialYellow);
-    return line;
-  }
+  // function allocateBuffer () {
+  //   let lineBuf = new THREE.BufferGeometry();
+  //   lineBuf.setAttribute('position', new THREE.BufferAttribute( new Float32Array((NUM_SEGS + 1) * 3), 3 ));
+  //   let line = new THREE.Line(lineBuf, orbitDisplay.materialYellow);
+  //   return line;
+  // }
 
   orbitDisplay.getPathShader = function () {
     return pathShader;

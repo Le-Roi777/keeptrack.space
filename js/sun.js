@@ -33,9 +33,10 @@
     sun.sunvar.ecLon = sun.sunvar.L + 1.915 * Math.sin(sun.sunvar.g * DEG2RAD) + 0.020 * Math.sin(2 * sun.sunvar.g * DEG2RAD);
     sun.sunvar.ob = _getObliquity(jd);
 
+    // Converted to Screen Space
     earth.lightDirection[0] = Math.cos(sun.sunvar.ecLon * DEG2RAD);
-    earth.lightDirection[1] = Math.cos(sun.sunvar.ob * DEG2RAD) * Math.sin(sun.sunvar.ecLon * DEG2RAD);
-    earth.lightDirection[2] = Math.sin(sun.sunvar.ob * DEG2RAD) * Math.sin(sun.sunvar.ecLon * DEG2RAD);
+    earth.lightDirection[1] = Math.sin(sun.sunvar.ob * DEG2RAD) * Math.sin(sun.sunvar.ecLon * DEG2RAD);
+    earth.lightDirection[2] = -1.0 * Math.cos(sun.sunvar.ob * DEG2RAD) * Math.sin(sun.sunvar.ecLon * DEG2RAD);
 
     // return [sun.sunvar.x, sun.sunvar.y, sun.sunvar.z];
   };

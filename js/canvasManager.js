@@ -131,7 +131,7 @@ canvasManager.start = () => {
         // canvasManager.renderer.setPixelRatio( dpi );
         canvasManager.aspect = canvas.width / canvas.height;
 
-        canvasManager.camera.position.z = 44105;
+        canvasManager.camera.position.z = settingsManager.canvasManager.defaultCameraDistanceFromEarth;
         canvasManager.camera.position.x = 0;
         canvasManager.camera.position.y = 0;
 
@@ -184,7 +184,86 @@ canvasManager.start = () => {
         canvasManager.objects.sun.lightMoon = new THREE.DirectionalLight(color, intensity);
       }
     };
+    canvasManager.loadEarthTexture = () => {
+      if (settingsManager.nasaImages) img = settingsManager.installDirectory + 'images/dayearth-4096.jpg';
+      if (settingsManager.trusatImages) img = settingsManager.installDirectory + 'images/trusatvector-4096.jpg';
+      if (settingsManager.blueImages) img = settingsManager.installDirectory + 'images/world_blue-2048.png';
+      if (settingsManager.lowresImages) img = settingsManager.installDirectory + 'images/no_clouds_4096.jpg';
+      if (settingsManager.vectorImages) img = settingsManager.installDirectory + 'images/dayearthvector-4096.jpg';
+      if (settingsManager.hiresImages) img = settingsManager.installDirectory + 'images/2_earth_16k.jpg';
+      if (settingsManager.hiresNoCloudsImages) img = settingsManager.installDirectory + 'images/no_clouds_8k.jpg';
+
+      if (settingsManager.nasaImages) nightImg = settingsManager.installDirectory + 'images/nightearth-4096.png';
+      if (settingsManager.trusatImages) nightImg = settingsManager.installDirectory + 'images/nightearth-4096.png';
+      if (settingsManager.lowresImages) nightImg = settingsManager.installDirectory + 'images/nightearth-4096.png';
+      if (settingsManager.blueImages) nightImg = settingsManager.installDirectory + 'images/nightearth-4096.png';
+      if (settingsManager.vectorImages) nightImg = settingsManager.installDirectory + 'images/dayearthvector-4096.jpg';
+      if (settingsManager.hiresImages || settingsManager.hiresNoCloudsImages) {
+        nightImg = settingsManager.installDirectory + 'images/6_night_16k.jpg';
+      }
+
+      return [img, nightImg];
+    };
+    canvasManager.updateEarthTexture = () => {
+      let img, nightImg;
+      [img, nightImg] = canvasManager.loadEarthTexture();
+      canvasManager.objects.earth.material.uniforms.uSampler = {
+        type: THREE.Texture,
+        value: loader.load(img)
+      };
+      canvasManager.objects.earth.material.uniforms.uNightSampler = {
+        type: THREE.Texture,
+        value: loader.load(nightImg)
+      };
+    };
+    canvasManager.earthNightToggle = () => {
+      let fs;
+      if (isDayNightToggle) {
+        fs = `
+          uniform vec3 uLightDirection;
+
+          varying vec2 texCoord;
+          varying vec3 vnormal;
+
+          uniform sampler2D uSampler;
+
+          void main(void) {
+            float directionalLightAmount = max(dot(vnormal, uLightDirection), 0.0);
+            vec3 lightColor = vec3(0.0,0.0,0.0) + (vec3(1.0,1.0,1.0) * directionalLightAmount);
+            vec3 litTexColor = texture2D(uSampler, texCoord).rgb * lightColor * 2.0;
+
+            vec3 nightLightColor = texture2D(uSampler, texCoord).rgb * pow(1.0 - directionalLightAmount, 2.0) ;
+
+            gl_FragColor = vec4(litTexColor + nightLightColor, 1.0);
+          }`;
+      } else {
+        fs = `
+          uniform vec3 uLightDirection;
+
+          varying vec2 texCoord;
+          varying vec3 vnormal;
+
+          uniform sampler2D uSampler;
+          uniform sampler2D uNightSampler;
+
+          void main(void) {
+            float directionalLightAmount = max(dot(vnormal, uLightDirection), 0.0);
+            vec3 lightColor = vec3(0.0,0.0,0.0) + (vec3(1.0,1.0,1.0) * directionalLightAmount);
+            vec3 litTexColor = texture2D(uSampler, texCoord).rgb * lightColor * 2.0;
+
+            vec3 nightLightColor = texture2D(uNightSampler, texCoord).rgb * pow(1.0 - directionalLightAmount, 2.0) ;
+
+            gl_FragColor = vec4(litTexColor + nightLightColor, 1.0);
+          }`;
+      }
+      canvasManager.objects.earth.material.fragmentShader = fs;
+      canvasManager.objects.earth.material.needsUpdate = true;
+    };
     canvasManager.initEarth = () => {
+      // Determine Which Map to Use
+      let img, nightImg;
+      [img, nightImg] = canvasManager.loadEarthTexture();
+
       // Make Earth and Black Earth
       {
         const radius =  RADIUS_OF_EARTH;
@@ -193,11 +272,11 @@ canvasManager.start = () => {
         const geometry = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
 
         let uniforms = {
-          uSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/no_clouds_4096.jpg',
+          uSampler: {type: THREE.Texture, value: loader.load(img,
           function (image) {
              canvasManager.isEarthDayLoaded = true;
           })},
-          uNightSampler: {type: THREE.Texture, value: loader.load(settingsManager.installDirectory + 'images/nightearth-4096.png',
+          uNightSampler: {type: THREE.Texture, value: loader.load(nightImg,
           function (image) {
              canvasManager.isEarthNightLoaded = true;
           })},
@@ -219,7 +298,7 @@ canvasManager.start = () => {
 
             void main(void) {
               float directionalLightAmount = max(dot(vnormal, uLightDirection), 0.0);
-              vec3 lightColor = vec3(0.0,0.0,0.0) + (vec3(1.0,1.0,1.0) * directionalLightAmount);
+              vec3 lightColor = (vec3(1.0,1.0,1.0) * directionalLightAmount);
               vec3 litTexColor = texture2D(uSampler, texCoord).rgb * lightColor * 2.0;
 
               vec3 nightLightColor = texture2D(uNightSampler, texCoord).rgb * pow(1.0 - directionalLightAmount, 2.0) ;
@@ -232,8 +311,7 @@ canvasManager.start = () => {
             varying float directionalLightAmount;
 
             void main(void) {
-              vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
-              gl_Position = projectionMatrix * modelViewPosition;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 
               texCoord = uv;
               vnormal = normal;
@@ -289,8 +367,8 @@ canvasManager.start = () => {
         new THREE.BufferAttribute(new Float32Array(starBufData), 1));
 
       let uniforms = {
-        minSize: {value: 9.0},
-        maxSize: {value: 80.0}
+        minSize: {value: settingsManager.canvasManager.satPointMinSize},
+        maxSize: {value: settingsManager.canvasManager.satPointMaxSize}
       };
 
       const fs = `
@@ -449,13 +527,21 @@ canvasManager.start = () => {
     canvasManager.cameraManager.directionVector = new THREE.Vector3();
     canvasManager.cameraManager.selectedSatVec3 = new THREE.Vector3(0,0,0);
     canvasManager.cameraManager.zoomFactor0 = 800;
-    canvasManager.cameraManager.zoomFactor = canvasManager.cameraManager.zoomFactor;
+    canvasManager.cameraManager.zoomFactor = canvasManager.cameraManager.zoomFactor0;
     canvasManager.cameraManager.targetAzimuthAngle = null;
     canvasManager.cameraManager.targetPolarAngle = null;
     canvasManager.cameraManager.targetZoom = null;
     canvasManager.cameraManager.getDistanceFrom0 = () => {
       return canvasManager.camera.position.distanceTo({x:0,y:0,z:0});
     };
+    canvasManager.cameraManager.cameraType = {};
+    canvasManager.cameraManager.cameraType.current = 0;
+    canvasManager.cameraManager.cameraType.DEFAULT = 0;
+    canvasManager.cameraManager.cameraType.OFFSET = 1;
+    canvasManager.cameraManager.cameraType.FPS = 2;
+    canvasManager.cameraManager.cameraType.PLANETARIUM = 3;
+    canvasManager.cameraManager.cameraType.SATELLITE = 4;
+    canvasManager.cameraManager.cameraType.ASTRONOMY = 5;
 
     function render(renderTime) {
       // Setup Time
@@ -496,6 +582,12 @@ canvasManager.start = () => {
         timeManager.lastDrawTime = drawNow;
       }
 
+      // Refresh FOV if changed
+      if (canvasManager.camera.fov !== canvasManager.fov) {
+        canvasManager.camera.fov = canvasManager.fov;
+        canvasManager.camera.updateProjectionMatrix();
+      }
+
       // Setup Camera Pitch/yaw
       {
         if (selectedSat !== -1) {
@@ -503,7 +595,7 @@ canvasManager.start = () => {
           if (!sat.static) {
             _camSnapToSat(sat);
           }
-          if (sat.static && cameraType.current=== cameraType.PLANETARIUM) {
+          if (sat.static && canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.PLANETARIUM) {
             // _camSnapToSat(selectedSat);
           }
         }
@@ -515,7 +607,7 @@ canvasManager.start = () => {
         }
       }
 
-      _drawLines();
+      // _drawLines();
       _drawEarth();
       _drawMoon();
       _drawSun();
@@ -530,76 +622,107 @@ canvasManager.start = () => {
       });
       orbitDisplay.draw();
 
-
-      if (canvasManager.cameraManager.targetPosition !== null) {
-        if (canvasManager.controls.object.position.manhattanDistanceTo(canvasManager.cameraManager.targetPosition) > 100 ) {
-          canvasManager.cameraManager.directionVector.subVectors( canvasManager.cameraManager.targetPosition, canvasManager.controls.object.position).normalize();
-          canvasManager.controls.object.position.addScaledVector(canvasManager.cameraManager.directionVector,canvasManager.cameraManager.moveSpeed * dt);
-          canvasManager.camera.lookAt(0,0,0);
-          if (canvasManager.controls.object.position.x > canvasManager.cameraManager.targetPosition.x - 100 &&
-            canvasManager.controls.object.position.x < canvasManager.cameraManager.targetPosition.x + 100 &&
-            canvasManager.controls.object.position.y > canvasManager.cameraManager.targetPosition.y - 100 &&
-            canvasManager.controls.object.position.y < canvasManager.cameraManager.targetPosition.y + 100 &&
-            canvasManager.controls.object.position.z > canvasManager.cameraManager.targetPosition.z - 100 &&
-            canvasManager.controls.object.position.z < canvasManager.cameraManager.targetPosition.z + 100 )
-            {
+      // Camera Drift To Target
+      {
+        if (canvasManager.cameraManager.targetPosition !== null) {
+          if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.DEFAULT) {
+            if (canvasManager.controls.object.position.manhattanDistanceTo(canvasManager.cameraManager.targetPosition) > 100 ) {
+              canvasManager.cameraManager.directionVector.subVectors( canvasManager.cameraManager.targetPosition, canvasManager.controls.object.position).normalize();
+              canvasManager.controls.object.position.addScaledVector(canvasManager.cameraManager.directionVector,canvasManager.cameraManager.moveSpeed * dt);
+              canvasManager.camera.lookAt(0,0,0);
+              if (canvasManager.controls.object.position.x > canvasManager.cameraManager.targetPosition.x - 100 &&
+                canvasManager.controls.object.position.x < canvasManager.cameraManager.targetPosition.x + 100 &&
+                canvasManager.controls.object.position.y > canvasManager.cameraManager.targetPosition.y - 100 &&
+                canvasManager.controls.object.position.y < canvasManager.cameraManager.targetPosition.y + 100 &&
+                canvasManager.controls.object.position.z > canvasManager.cameraManager.targetPosition.z - 100 &&
+                canvasManager.controls.object.position.z < canvasManager.cameraManager.targetPosition.z + 100 )
+              {
+                canvasManager.controls.object.position.x = canvasManager.cameraManager.targetPosition.x;
+                canvasManager.controls.object.position.y = canvasManager.cameraManager.targetPosition.y;
+                canvasManager.controls.object.position.z = canvasManager.cameraManager.targetPosition.z;
+                canvasManager.controls.object.position.round();
+                canvasManager.cameraManager.targetPosition = null;
+              }
+            }
+          } else {
+            if (canvasManager.controls.object.position.distanceTo(canvasManager.cameraManager.targetPosition) > 600 ) {
+              canvasManager.cameraManager.zoomFactor = 0;
+              // If more than 300km away just jump to the location
               canvasManager.controls.object.position.x = canvasManager.cameraManager.targetPosition.x;
               canvasManager.controls.object.position.y = canvasManager.cameraManager.targetPosition.y;
               canvasManager.controls.object.position.z = canvasManager.cameraManager.targetPosition.z;
               canvasManager.controls.object.position.round();
               canvasManager.cameraManager.targetPosition = null;
+            } else if (canvasManager.controls.object.position.distanceTo(canvasManager.cameraManager.targetPosition) > 3 ) {
+              // If less than 300km away but more than 5 try to drift within 5 to reduce jitter
+              canvasManager.cameraManager.directionVector.subVectors( canvasManager.cameraManager.targetPosition, canvasManager.controls.object.position).normalize();
+              canvasManager.controls.object.position.addScaledVector(canvasManager.cameraManager.directionVector,canvasManager.cameraManager.moveSpeed * 0.0125 * dt);
+              if (canvasManager.controls.object.position.x > canvasManager.cameraManager.targetPosition.x - 0.5 &&
+                canvasManager.controls.object.position.x < canvasManager.cameraManager.targetPosition.x + 0.5 &&
+                canvasManager.controls.object.position.y > canvasManager.cameraManager.targetPosition.y - 0.5 &&
+                canvasManager.controls.object.position.y < canvasManager.cameraManager.targetPosition.y + 0.5 &&
+                canvasManager.controls.object.position.z > canvasManager.cameraManager.targetPosition.z - 0.5 &&
+                canvasManager.controls.object.position.z < canvasManager.cameraManager.targetPosition.z + 0.5 )
+              {
+                canvasManager.controls.object.position.x = canvasManager.cameraManager.targetPosition.x;
+                canvasManager.controls.object.position.y = canvasManager.cameraManager.targetPosition.y;
+                canvasManager.controls.object.position.z = canvasManager.cameraManager.targetPosition.z;
+                canvasManager.controls.object.position.round();
+                canvasManager.cameraManager.targetPosition = null;
+              }
             }
           }
-      }
-
-      if (canvasManager.cameraManager.targetAzimuthAngle !== null) {
-        canvasManager.cameraManager.targetAzimuthAngle = (canvasManager.cameraManager.targetAzimuthAngle > 180 * DEG2RAD) ? canvasManager.cameraManager.targetAzimuthAngle % 360 * DEG2RAD : canvasManager.cameraManager.targetAzimuthAngle;
-        canvasManager.cameraManager.targetAzimuthAngle = (canvasManager.cameraManager.targetAzimuthAngle < -180 * DEG2RAD) ? canvasManager.cameraManager.targetAzimuthAngle % 360 * DEG2RAD : canvasManager.cameraManager.targetAzimuthAngle;
-        if (canvasManager.controls.getAzimuthalAngle() > canvasManager.cameraManager.targetAzimuthAngle) {
-          canvasManager.controls.rotateLeft(canvasManager.cameraManager.rotateSpeed * dt);
-        } else {
-          canvasManager.controls.rotateLeft(-canvasManager.cameraManager.rotateSpeed * dt);
         }
-        if (canvasManager.controls.getAzimuthalAngle() <= canvasManager.cameraManager.targetAzimuthAngle + 0.02 &&
-            canvasManager.controls.getAzimuthalAngle() >= canvasManager.cameraManager.targetAzimuthAngle - 0.02) {
-              canvasManager.controls.setThetaOverride(canvasManager.cameraManager.targetAzimuthAngle);
-              canvasManager.cameraManager.targetAzimuthAngle = null;
-            }
-      }
-
-      if (canvasManager.cameraManager.targetPolarAngle !== null) {
-        canvasManager.cameraManager.targetPolarAngle = (canvasManager.cameraManager.targetPolarAngle > 180 * DEG2RAD) ? canvasManager.cameraManager.targetPolarAngle % 180 * DEG2RAD : canvasManager.cameraManager.targetPolarAngle;
-        canvasManager.cameraManager.targetPolarAngle = (canvasManager.cameraManager.targetPolarAngle < -180 * DEG2RAD) ? canvasManager.cameraManager.targetPolarAngle % 180 * DEG2RAD : canvasManager.cameraManager.targetPolarAngle;
-        if (canvasManager.controls.getPolarAngle() > canvasManager.cameraManager.targetPolarAngle) {
-          canvasManager.controls.rotateUp(canvasManager.cameraManager.rotateSpeed  * dt);
-        } else {
-          canvasManager.controls.rotateUp(-canvasManager.cameraManager.rotateSpeed * dt);
+        if (canvasManager.cameraManager.targetAzimuthAngle !== null) {
+          canvasManager.cameraManager.targetAzimuthAngle = (canvasManager.cameraManager.targetAzimuthAngle > 180 * DEG2RAD) ? canvasManager.cameraManager.targetAzimuthAngle % 360 * DEG2RAD : canvasManager.cameraManager.targetAzimuthAngle;
+          canvasManager.cameraManager.targetAzimuthAngle = (canvasManager.cameraManager.targetAzimuthAngle < -180 * DEG2RAD) ? canvasManager.cameraManager.targetAzimuthAngle % 360 * DEG2RAD : canvasManager.cameraManager.targetAzimuthAngle;
+          if (canvasManager.controls.getAzimuthalAngle() > canvasManager.cameraManager.targetAzimuthAngle) {
+            canvasManager.controls.rotateLeft(canvasManager.cameraManager.rotateSpeed * dt);
+          } else {
+            canvasManager.controls.rotateLeft(-canvasManager.cameraManager.rotateSpeed * dt);
+          }
+          if (canvasManager.controls.getAzimuthalAngle() <= canvasManager.cameraManager.targetAzimuthAngle + 0.02 &&
+              canvasManager.controls.getAzimuthalAngle() >= canvasManager.cameraManager.targetAzimuthAngle - 0.02) {
+                canvasManager.controls.setThetaOverride(canvasManager.cameraManager.targetAzimuthAngle);
+                canvasManager.cameraManager.targetAzimuthAngle = null;
+              }
         }
-        if (canvasManager.controls.getPolarAngle() <= canvasManager.cameraManager.targetPolarAngle + 0.02 &&
-            canvasManager.controls.getPolarAngle() >= canvasManager.cameraManager.targetPolarAngle - 0.02) {
-              canvasManager.controls.setPhiOverride(canvasManager.cameraManager.targetPolarAngle);
-              canvasManager.cameraManager.targetPolarAngle = null;
-            }
-      }
-
-      if (canvasManager.cameraManager.targetZoom !== null) {
-        if (canvasManager.cameraManager.getDistanceFrom0() < canvasManager.cameraManager.targetZoom - 30 ||
-            canvasManager.cameraManager.getDistanceFrom0() > canvasManager.cameraManager.targetZoom + 30) {
-          canvasManager.controls.object.translateZ(
-            Math.min(canvasManager.cameraManager.zoomSpeed,
-              Math.max(-canvasManager.cameraManager.zoomSpeed,
-                (canvasManager.cameraManager.getDistanceFrom0() - canvasManager.cameraManager.targetZoom) *
-                -1.0 * dt
+        if (canvasManager.cameraManager.targetPolarAngle !== null) {
+          canvasManager.cameraManager.targetPolarAngle = (canvasManager.cameraManager.targetPolarAngle > 180 * DEG2RAD) ? canvasManager.cameraManager.targetPolarAngle % 180 * DEG2RAD : canvasManager.cameraManager.targetPolarAngle;
+          canvasManager.cameraManager.targetPolarAngle = (canvasManager.cameraManager.targetPolarAngle < -180 * DEG2RAD) ? canvasManager.cameraManager.targetPolarAngle % 180 * DEG2RAD : canvasManager.cameraManager.targetPolarAngle;
+          if (canvasManager.controls.getPolarAngle() > canvasManager.cameraManager.targetPolarAngle) {
+            canvasManager.controls.rotateUp(canvasManager.cameraManager.rotateSpeed  * dt);
+          } else {
+            canvasManager.controls.rotateUp(-canvasManager.cameraManager.rotateSpeed * dt);
+          }
+          if (canvasManager.controls.getPolarAngle() <= canvasManager.cameraManager.targetPolarAngle + 0.02 &&
+              canvasManager.controls.getPolarAngle() >= canvasManager.cameraManager.targetPolarAngle - 0.02) {
+                canvasManager.controls.setPhiOverride(canvasManager.cameraManager.targetPolarAngle);
+                canvasManager.cameraManager.targetPolarAngle = null;
+              }
+        }
+        if (canvasManager.cameraManager.targetZoom !== null) {
+          if (canvasManager.cameraManager.getDistanceFrom0() < canvasManager.cameraManager.targetZoom - 30 ||
+              canvasManager.cameraManager.getDistanceFrom0() > canvasManager.cameraManager.targetZoom + 30) {
+            canvasManager.controls.object.translateZ(
+              Math.min(canvasManager.cameraManager.zoomSpeed,
+                Math.max(-canvasManager.cameraManager.zoomSpeed,
+                  (canvasManager.cameraManager.getDistanceFrom0() - canvasManager.cameraManager.targetZoom) *
+                  -1.0 * dt
+                )
               )
-            )
-          );
-        } else {
-          canvasManager.cameraManager.targetZoom = null;
+            );
+          } else {
+            canvasManager.cameraManager.targetZoom = null;
+          }
         }
       }
 
+      if (settingsManager.isDemoModeOn) _demoMode();
+
+      // NO CUSTOM CAMERAS FOR NOW!!
+      _drawCamera();
       canvasManager.controls.update();
-      // _drawCamera();
 
       // canvasManager.composer.render();
       canvasManager.renderer.clear();
@@ -618,10 +741,10 @@ canvasManager.start = () => {
     canvasManager.scene.add(canvasManager.objects.ambientLight);
 
     // canvasManager.scene.add(canvasManager.objects.sun.lightEarth);
-    canvasManager.objects.earth.add(canvasManager.objects.sun);
-    canvasManager.objects.earth.add(canvasManager.objects.sun.lightMoon.target);
-    canvasManager.objects.earth.add(canvasManager.objects.moon);
+    // canvasManager.objects.sun.add(canvasManager.objects.sun.lightMoon.target);
+    // canvasManager.objects.earth.add(canvasManager.objects.moon);
     // canvasManager.objects.earth.add(canvasManager.objects.atmosphere);
+    canvasManager.scene.add(canvasManager.objects.sun);
     canvasManager.scene.add(canvasManager.objects.earth);
     canvasManager.scene.add(canvasManager.objects.sats);
 
@@ -799,16 +922,11 @@ canvasManager.start = () => {
   }
   function _drawSun() {
     sun.currentDirection();
+    // Sets values in screen space in sun.js
     canvasManager.objects.earth.material.uniforms.uLightDirection = {type: 'vec3', value: earth.lightDirection};
-    let sunXYZ = sun.getXYZ();
-    let sunMaxDist = Math.max(Math.max(sunXYZ.x,sunXYZ.y),sunXYZ.z);
-    sunXYZ.x = sunXYZ.x / sunMaxDist * SUN_SCALAR_DISTANCE;
-    sunXYZ.y = sunXYZ.y / sunMaxDist * SUN_SCALAR_DISTANCE;
-    sunXYZ.z = sunXYZ.z / sunMaxDist * SUN_SCALAR_DISTANCE;
-
-    canvasManager.objects.sun.position.x = sunXYZ.x;
-    canvasManager.objects.sun.position.y = sunXYZ.y;
-    canvasManager.objects.sun.position.z = sunXYZ.z;
+    canvasManager.objects.sun.position.x = earth.lightDirection[0] * SUN_SCALAR_DISTANCE;
+    canvasManager.objects.sun.position.y = earth.lightDirection[1] * SUN_SCALAR_DISTANCE;
+    canvasManager.objects.sun.position.z = earth.lightDirection[2] * SUN_SCALAR_DISTANCE;
 
     // canvasManager.objects.sun.lightEarth.position.set(sunXYZ.x, sunXYZ.y, sunXYZ.z);
     // canvasManager.objects.sun.lightEarth.target.position.set(0, 0, 0);
@@ -846,64 +964,47 @@ function _drawCamera () {
      zoomTarget = 0.5;
    }
 
-  switch (cameraType.current) {
-    case cameraType.DEFAULT: // pivot around the earth with earth in the center
-      // canvasManager.scene.rotation.x = camPitch;
-      // canvasManager.scene.rotation.y = -camYaw - earthInfo.earthEra;
+  switch (canvasManager.cameraManager.cameraType.current) {
+    case canvasManager.cameraManager.cameraType.DEFAULT: // pivot around the earth with earth in the center
+      // canvasManager.scene.rotation.y = -earthInfo.earthEra;
+      // canvasManager.pickingScene.rotation.y = -earthInfo.earthEra;
+      break;
+    case canvasManager.cameraManager.cameraType.OFFSET: // pivot around the earth with earth offset to the bottom right
+      // DISABLED
+      break;
+    case canvasManager.cameraManager.cameraType.FPS: // FPS style movement
+      // DISABLED
+      // canvasManager.emptyEuler.setFromQuaternion( canvasManager.camera.quaternion );
       //
-      // canvasManager.pickingScene.rotation.x = camPitch;
-      // canvasManager.pickingScene.rotation.y = -camYaw - earthInfo.earthEra;
-
-      // let dist = _getCamDist();
-      // canvasManager.camera.position.x = dist * Math.cos(-camPitch) * Math.cos(-camYaw);
-      // canvasManager.camera.position.y = dist * Math.sin(-camPitch) * Math.cos(-camYaw);
-      // canvasManager.camera.position.z = dist * Math.sin(-camYaw);
-      // canvasManager.camera.lookAt(new THREE.Vector3(0, 0, 0));
-
-      canvasManager.scene.rotation.y = -earthInfo.earthEra;
-      canvasManager.pickingScene.rotation.y = -earthInfo.earthEra;
-
+  		// canvasManager.emptyEuler.y = -fpsYaw;
+  		// canvasManager.emptyEuler.x = fpsPitch;
+      //
+  		// canvasManager.emptyEuler.x = Math.max(
+      //   Math.PI / 2 - Math.PI,
+      //   Math.min( Math.PI / 2 - 0, canvasManager.emptyEuler.x )
+      // );
+  		// canvasManager.camera.quaternion.setFromEuler( canvasManager.emptyEuler );
       break;
-    case cameraType.OFFSET: // pivot around the earth with earth offset to the bottom right
-      canvasManager.scene.rotation.x = camPitch;
-      canvasManager.scene.rotation.y = -camYaw - earthInfo.earthEra;
-
-      canvasManager.pickingScene.rotation.x = camPitch;
-      canvasManager.pickingScene.rotation.y = -camYaw - earthInfo.earthEra;
+    case canvasManager.cameraManager.cameraType.PLANETARIUM: // pivot around the earth looking away from the earth
+      let eci = _lla2eci(sensorManager.selectedSensor.lat,sensorManager.selectedSensor.long,sensorManager.selectedSensor.obshei + 20);
+      let cs = eci2CanvasSpace(eci);
+      canvasManager.cameraManager.targetPosition = cs;
+      // canvasManager.camera.position.x = cs.x;
+      // canvasManager.camera.position.y = cs.y;
+      // canvasManager.camera.position.z = cs.z;
+      eci = _lla2eci(sensorManager.selectedSensor.lat,sensorManager.selectedSensor.long,sensorManager.selectedSensor.obshei + 50000);
+      cs = eci2CanvasSpace(eci);
+      // canvasManager.camera.lookAt(cs.x,cs.y,cs.z);
+      canvasManager.controls.target = (new THREE.Vector3(cs.x,cs.y,cs.z));
+      canvasManager.objects.atmosphere.visible = false;
+      // if (canvasManager.camera.fov !== 90) {
+      //   canvasManager.camera.fov = 90;
+      //   canvasManager.camera.updateProjectionMatrix();
+      // }
+      _showOrbitsAbove();
+      return;
+    case canvasManager.cameraManager.cameraType.SATELLITE:
       break;
-    case cameraType.FPS: // FPS style movement
-      canvasManager.emptyEuler.setFromQuaternion( canvasManager.camera.quaternion );
-
-  		canvasManager.emptyEuler.y = -fpsYaw;
-  		canvasManager.emptyEuler.x = fpsPitch;
-
-  		canvasManager.emptyEuler.x = Math.max(
-        Math.PI / 2 - Math.PI,
-        Math.min( Math.PI / 2 - 0, canvasManager.emptyEuler.x )
-      );
-  		canvasManager.camera.quaternion.setFromEuler( canvasManager.emptyEuler );
-
-      canvasManager.scene.rotation.y = -earthInfo.earthEra;
-      canvasManager.pickingScene.rotation.y = -earthInfo.earthEra;
-      break;
-    case cameraType.PLANETARIUM: // pivot around the earth looking away from the earth
-      {
-        let satPos = _calculateSensorPos({});
-
-        // Pitch is the opposite of the angle to the latitude
-        // Yaw is 90 degrees to the left of the angle to the longitude
-        pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
-        yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
-        mat4.rotate(camMatrix, camMatrix, pitchRotate, [1, 0, 0]);
-        mat4.rotate(camMatrix, camMatrix, yawRotate, [0, 0, 1]);
-
-        mat4.translate(camMatrix, camMatrix, [-satPos.x, -satPos.y, -satPos.z]);
-
-        _showOrbitsAbove();
-
-        break;
-      }
-    case cameraType.SATELLITE:
       {
         orbitDisplay.updateOrbitBuffer(lastSelectedSat);
 
@@ -934,8 +1035,19 @@ function _drawCamera () {
 
         break;
       }
-    case cameraType.ASTRONOMY:
+    case canvasManager.cameraManager.cameraType.ASTRONOMY:
       {
+        let eci = _lla2eci(sensorManager.selectedSensor.lat,sensorManager.selectedSensor.long,sensorManager.selectedSensor.obshei + 20);
+        let cs = eci2CanvasSpace(eci);
+        canvasManager.camera.position.x = cs.x;
+        canvasManager.camera.position.y = cs.y;
+        canvasManager.camera.position.z = cs.z;
+        canvasManager.camera.lookAt(0,0,0);
+        canvasManager.camera.rotateY(90*DEG2RAD);
+        return;
+      }
+      {
+
         let satPos = _calculateSensorPos({});
 
         // Pitch is the opposite of the angle to the latitude
@@ -943,7 +1055,7 @@ function _drawCamera () {
         pitchRotate = ((-1 * sensorManager.currentSensor.lat) * DEG2RAD);
         yawRotate = ((90 - sensorManager.currentSensor.long) * DEG2RAD) - satPos.gmst;
 
-        // TODO: Calculate elevation for cameraType.ASTRONOMY
+        // TODO: Calculate elevation for canvasManager.cameraManager.cameraType.ASTRONOMY
         // Idealy the astronomy view would feel more natural and tell you what
         // az/el you are currently looking at.
 
@@ -974,7 +1086,6 @@ function _drawCamera () {
         break;
       }
   }
-  return camMatrix;
 }
 
 var satLabelModeLastTime = 0;
@@ -1010,7 +1121,7 @@ function rotateToLLA(lat,lon,alt) {
   } else {
     canvasManager.cameraManager.targetAzimuthAngle = sphere.theta;
   }
-  canvasManager.cameraManager.targetZoom = Math.max(sphere.radius,RADIUS_OF_EARTH + 10000);
+  canvasManager.cameraManager.targetZoom = Math.min(Math.max(sphere.radius,(RADIUS_OF_EARTH + 10000)),canvasManager.controls.maxDistance - 100);
 }
 
 function _canvasSpace2spherical(x,y,z) {
@@ -1035,7 +1146,7 @@ function _normalizeAngle (angle) {
 }
 function _showOrbitsAbove () {
 
-  if ((!settingsManager.isSatLabelModeOn || cameraType.current !== cameraType.PLANETARIUM)) {
+  if ((!settingsManager.isSatLabelModeOn || canvasManager.cameraManager.cameraType.current !== canvasManager.cameraManager.cameraType.PLANETARIUM)) {
     if (isSatMiniBoxInUse) {
       $('#sat-minibox').html('');
     }
@@ -1064,31 +1175,35 @@ function _showOrbitsAbove () {
     if (sat.OT === 3 && ColorScheme.objectTypeFlags.debris === false) continue;
     if (sat.inview && ColorScheme.objectTypeFlags.inFOV === false) continue;
 
-    satSet.getScreenCoords(i, pMatrix, camMatrix, sat.position);
-    if (satScreenPositionArray.error) continue;
-    if (typeof satScreenPositionArray.x == 'undefined' || typeof satScreenPositionArray.y == 'undefined') continue;
-    if (satScreenPositionArray.x > window.innerWidth || satScreenPositionArray.y > window.innerHeight) continue;
+    // TODO: Use three.js to display satellite numbers on canvas
+    // This solution should be replaced by this:
+    // https://stackoverflow.com/questions/45426191/put-labels-on-every-nodethree-point-in-scene-three-js
+    //
+    // satSet.getScreenCoords(i, sat.position);
+    // if (satScreenPositionArray.error) continue;
+    // if (typeof satScreenPositionArray.x == 'undefined' || typeof satScreenPositionArray.y == 'undefined') continue;
+    // if (satScreenPositionArray.x > window.innerWidth || satScreenPositionArray.y > window.innerHeight) continue;
 
     // Draw Orbits
     orbitDisplay.addInViewOrbit(i);
 
     // Draw Sat Labels
     // if (settingsManager.isDisableSatHoverBox) continue;
-    satHoverMiniDOM = document.createElement("div");
-    satHoverMiniDOM.id = 'sat-minibox-' + i;
-    satHoverMiniDOM.textContent = sat.SCC_NUM;
-    satHoverMiniDOM.setAttribute(
-      'style',
-      "display: block; position: absolute; left: " + satScreenPositionArray.x + 10 + "px; top: " + satScreenPositionArray.y + "px;"
-    );
-    hoverBoxOnSatMiniElements.appendChild(satHoverMiniDOM);
-    labelCount++;
+    // satHoverMiniDOM = document.createElement("div");
+    // satHoverMiniDOM.id = 'sat-minibox-' + i;
+    // satHoverMiniDOM.textContent = sat.SCC_NUM;
+    // satHoverMiniDOM.setAttribute(
+    //   'style',
+    //   "display: block; position: absolute; left: " + satScreenPositionArray.x + 10 + "px; top: " + satScreenPositionArray.y + "px;"
+    // );
+    // hoverBoxOnSatMiniElements.appendChild(satHoverMiniDOM);
+    // labelCount++;
   }
   isSatMiniBoxInUse = true;
   satLabelModeLastTime = timeManager.lastlastDrawTime;
 }
 function _hoverBoxOnSat (satId, satX, satY) {
-  if (cameraType.current === cameraType.PLANETARIUM && !settingsManager.isDemoModeOn) {
+  if (canvasManager.cameraManager.cameraType.current === canvasManager.cameraManager.cameraType.PLANETARIUM && !settingsManager.isDemoModeOn) {
     satHoverBoxDOM.css({display: 'none'});
     if (satId === -1) {
       canvasDOM2.css({cursor: 'default'});
@@ -1204,47 +1319,47 @@ function _fpsMovement () {
   if (fpsLastTime !== 0) {
     fpsElapsed = fpsTimeNow - fpsLastTime;
 
-    if (isFPSForwardSpeedLock && fpsForwardSpeed < 0) {
-      fpsForwardSpeed = Math.max(fpsForwardSpeed + Math.min(fpsForwardSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.fpsForwardSpeed);
-    } else if (isFPSForwardSpeedLock && fpsForwardSpeed > 0) {
-      fpsForwardSpeed = Math.min(fpsForwardSpeed + Math.max(fpsForwardSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsForwardSpeed);
+    if (uiManager.keyManager.isfpsForwardSpeedLock && uiManager.keyManager.fpsForwardSpeed < 0) {
+      uiManager.keyManager.fpsForwardSpeed = Math.max(uiManager.keyManager.fpsForwardSpeed + Math.min(uiManager.keyManager.fpsForwardSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.uiManager.keyManager.fpsForwardSpeed);
+    } else if (uiManager.keyManager.isfpsForwardSpeedLock && uiManager.keyManager.fpsForwardSpeed > 0) {
+      uiManager.keyManager.fpsForwardSpeed = Math.min(uiManager.keyManager.fpsForwardSpeed + Math.max(uiManager.keyManager.fpsForwardSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.uiManager.keyManager.fpsForwardSpeed);
     }
 
-    if (isFPSSideSpeedLock && fpsSideSpeed < 0) {
-      fpsSideSpeed = Math.max(fpsSideSpeed + Math.min(fpsSideSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.fpsSideSpeed);
-    } else if (isFPSSideSpeedLock && fpsSideSpeed < 0) {
-      fpsSideSpeed = Math.min(fpsSideSpeed + Math.max(fpsSideSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsSideSpeed);
+    if (uiManager.keyManager.isfpsSideSpeedLock && uiManager.keyManager.fpsSideSpeed < 0) {
+      uiManager.keyManager.fpsSideSpeed = Math.max(uiManager.keyManager.fpsSideSpeed + Math.min(uiManager.keyManager.fpsSideSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.uiManager.keyManager.fpsSideSpeed);
+    } else if (uiManager.keyManager.isfpsSideSpeedLock && uiManager.keyManager.fpsSideSpeed < 0) {
+      uiManager.keyManager.fpsSideSpeed = Math.min(uiManager.keyManager.fpsSideSpeed + Math.max(uiManager.keyManager.fpsSideSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.uiManager.keyManager.fpsSideSpeed);
     }
 
-    if (isFPSVertSpeedLock && fpsVertSpeed < 0) {
-      fpsVertSpeed = Math.max(fpsVertSpeed + Math.min(fpsVertSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.fpsVertSpeed);
-    } else if (isFPSVertSpeedLock && fpsVertSpeed < 0) {
-      fpsVertSpeed = Math.min(fpsVertSpeed + Math.max(fpsVertSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.fpsVertSpeed);
+    if (uiManager.keyManager.isfpsVertSpeedLock && uiManager.keyManager.fpsVertSpeed < 0) {
+      uiManager.keyManager.fpsVertSpeed = Math.max(uiManager.keyManager.fpsVertSpeed + Math.min(uiManager.keyManager.fpsVertSpeed * -1.02 * fpsElapsed, -0.2), -settingsManager.uiManager.keyManager.fpsVertSpeed);
+    } else if (uiManager.keyManager.isfpsVertSpeedLock && uiManager.keyManager.fpsVertSpeed < 0) {
+      uiManager.keyManager.fpsVertSpeed = Math.min(uiManager.keyManager.fpsVertSpeed + Math.max(uiManager.keyManager.fpsVertSpeed * 1.02 * fpsElapsed, 0.2), settingsManager.uiManager.keyManager.fpsVertSpeed);
     }
 
-    if (cameraType.current == cameraType.FPS) {
-      if (fpsForwardSpeed !== 0) {
-        canvasManager.camera.translateZ(-fpsForwardSpeed * fpsRun * fpsElapsed);
+    if (canvasManager.cameraManager.cameraType.current == canvasManager.cameraManager.cameraType.FPS) {
+      if (uiManager.keyManager.fpsForwardSpeed !== 0) {
+        canvasManager.camera.translateZ(-uiManager.keyManager.fpsForwardSpeed * uiManager.keyManager.fpsRun * fpsElapsed);
       }
-      if (fpsVertSpeed !== 0) {
-        canvasManager.camera.translateY(-fpsVertSpeed * fpsRun * fpsElapsed);
+      if (uiManager.keyManager.fpsVertSpeed !== 0) {
+        canvasManager.camera.translateY(-uiManager.keyManager.fpsVertSpeed * uiManager.keyManager.fpsRun * fpsElapsed);
       }
-      if (fpsSideSpeed !== 0) {
-        canvasManager.camera.translateX(fpsSideSpeed * fpsRun * fpsElapsed);
+      if (uiManager.keyManager.fpsSideSpeed !== 0) {
+        canvasManager.camera.translateX(uiManager.keyManager.fpsSideSpeed * uiManager.keyManager.fpsRun * fpsElapsed);
       }
     }
 
-    if (!isFPSForwardSpeedLock) fpsForwardSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
-    if (!isFPSSideSpeedLock) fpsSideSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
-    if (!isFPSVertSpeedLock) fpsVertSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
+    if (!uiManager.keyManager.isfpsForwardSpeedLock) uiManager.keyManager.fpsForwardSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
+    if (!uiManager.keyManager.isfpsSideSpeedLock) uiManager.keyManager.fpsSideSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
+    if (!uiManager.keyManager.isfpsVertSpeedLock) uiManager.keyManager.fpsVertSpeed *= Math.min(0.98 * fpsElapsed, 0.98);
 
-    if (fpsForwardSpeed < 0.01 && fpsForwardSpeed > -0.01) fpsForwardSpeed = 0;
-    if (fpsSideSpeed < 0.01 && fpsSideSpeed > -0.01) fpsSideSpeed = 0;
-    if (fpsVertSpeed < 0.01 && fpsVertSpeed > -0.01) fpsVertSpeed = 0;
+    if (uiManager.keyManager.fpsForwardSpeed < 0.01 && uiManager.keyManager.fpsForwardSpeed > -0.01) uiManager.keyManager.fpsForwardSpeed = 0;
+    if (uiManager.keyManager.fpsSideSpeed < 0.01 && uiManager.keyManager.fpsSideSpeed > -0.01) uiManager.keyManager.fpsSideSpeed = 0;
+    if (uiManager.keyManager.fpsVertSpeed < 0.01 && uiManager.keyManager.fpsVertSpeed > -0.01) uiManager.keyManager.fpsVertSpeed = 0;
 
     fpsPitch += fpsPitchRate * fpsElapsed;
-    fpsRotate += fpsRotateRate * fpsElapsed;
-    fpsYaw += fpsYawRate * fpsElapsed;
+    fpsRotate += uiManager.keyManager.fpsRotateRate * fpsElapsed;
+    fpsYaw += uiManager.keyManager.fpsYawRate * fpsElapsed;
 
   }
   fpsLastTime = fpsTimeNow;
@@ -1253,8 +1368,6 @@ function _fpsMovement () {
 canvasManager.lastRayTime = 0;
 canvasManager.rayCastInterval = 1000/30;
 function getEarthScreenPoint (x, y) {
-  // Raycasting Disabled for Now
-  // return;
   if (Date.now() - canvasManager.lastRayTime > canvasManager.rayCastInterval) {
     x = ( x / canvasDOM2.width() ) * 2 - 1;
     y = - ( y / canvasDOM2.height() ) * 2 + 1;
@@ -1293,12 +1406,8 @@ function _updateHover () {
   currentSearchSats = searchBox.getLastResultGroup();
   if (searchBox.isHovering()) {
     updateHoverSatId = searchBox.getHoverSat();
-    satSet.getScreenCoords(updateHoverSatId, pMatrix, camMatrix);
-    _hoverBoxOnSat(updateHoverSatId, satScreenPositionArray.x, satScreenPositionArray.y);
-    // if (!_earthHitTest(satScreenPositionArray.x, satScreenPositionArray.y)) {
-    // } else {
-    //   _hoverBoxOnSat(-1, 0, 0);
-    // }
+    let screenPos = satSet.getScreenCoords(updateHoverSatId);
+    _hoverBoxOnSat(updateHoverSatId, screenPos.x, screenPos.y);
   } else {
     if (!isMouseMoving || isDragging || settingsManager.isMobileModeEnabled) { return; }
 
@@ -1321,59 +1430,200 @@ function _updateHover () {
     satSet.setHover(mouseSat);
     _hoverBoxOnSat(mouseSat, mouseX, mouseY);
   }
-  function _earthHitTest (x, y) {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, gl.pickFb);
-    gl.readPixels(x, gl.drawingBufferHeight - y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pickColorBuf);
+}
 
-    return false;
+var demoModeLastTime = 0;
+function _demoMode () {
+  if (objectManager.isSensorManagerLoaded && !sensorManager.checkSensorSelected()) return;
+  if (drawNow - demoModeLastTime < settingsManager.demoModeInterval) return;
 
-    return (pickColorBuf[0] === 0 &&
-      pickColorBuf[1] === 0 &&
-      pickColorBuf[2] === 0);
-    }
+  demoModeLastTime = drawNow;
+
+  let i = 50;
+  while(i > 0) {
+    i--;
+    let randomSatellite = Math.round(Math.random() * satSet.getSatData().length);
+    let sat = satSet.getSat(randomSatellite);
+    console.log(randomSatellite);
+    console.log(sat);
+    if (sat.static) continue;
+    if (sat.missile) continue;
+    // if (!sat.inview) continue;
+    if (sat.OT === 1 && ColorScheme.objectTypeFlags.payload === false) continue;
+    if (sat.OT === 2 && ColorScheme.objectTypeFlags.rocketBody === false) continue;
+    if (sat.OT === 3 && ColorScheme.objectTypeFlags.debris === false) continue;
+    if (sat.inview && ColorScheme.objectTypeFlags.inFOV === false) continue;
+    let screenVec = satSet.getScreenCoords(randomSatellite);
+    if (!screenVec) continue;
+    if (typeof screenVec.x == 'undefined' || typeof screenVec.y == 'undefined') continue;
+    if (screenVec.x > window.innerWidth || screenVec.y > window.innerHeight) continue;
+    _hoverBoxOnSat(randomSatellite, screenVec.x, screenVec.y);
+    orbitDisplay.setSelectOrbit(i);
+    demoModeSatellite = i + 1;
+    return;
+  }
+}
+
+function debugDrawLine (type, value, color) {
+  let lineInfo = {};
+  if (typeof color == 'undefined') color = [1.0, 0, 1.0, 1.0];
+  switch (color) {
+    case 'r':
+      color = [1,0,0,1];
+      break;
+    case 'o':
+      color = [1,0.5,0,1];
+      break;
+    case 'y':
+      color = [1,1,0,1];
+      break;
+    case 'g':
+      color = [0,1,0,1];
+      break;
+    case 'b':
+      color = [0,0,1,1];
+      break;
+    case 'c':
+      color = [0,1,1,1];
+      break;
+    case 'p':
+      color = [1,0,1,1];
+      break;
+  }
+  if (type == 'sat') {
+    let sat = satSet.getSat(value);
+    sat.position = eci2CanvasSpace(sat.position);
+    lineInfo =
+      {
+        'sat': sat,
+        'ref': [0,0,0],
+        'ref2': [sat.position.x, sat.position.y, sat.position.z],
+        'color': color
+      };
+  }
+  if (type == 'sat2') {
+    let sat = satSet.getSat(value[0]);
+    sat.position = eci2CanvasSpace(sat.position);
+    lineInfo =
+      {
+        'sat': sat,
+        'ref': [value[1], value[2], value[3]],
+        'ref2': [sat.position.x, sat.position.y, sat.position.z],
+        'color': color
+      };
+  }
+  if (type == 'sat3') {
+    let sat = satSet.getSat(value[0]);
+    var sat2 = satSet.getSat(value[1]);
+    sat.position = eci2CanvasSpace(sat.position);
+    lineInfo =
+      {
+        'sat': sat,
+        'sat2': sat2,
+        'ref': [sat.position.x, sat.position.y, sat.position.z],
+        'ref2': [sat2.position.x, sat2.position.y, sat2.position.z],
+        'color': color
+      };
+  }
+  if (type == 'ref') {
+    lineInfo =
+      {
+        'ref': [0,0,0],
+        'ref2': [value[0], value[1], value[2]],
+        'color': color
+      };
+  }
+  if (type == 'ref2') {
+    lineInfo =
+      {
+        'ref': [value[0], value[1], value[2]],
+        'ref2': [value[3], value[4], value[5]],
+        'color': color
+      };
   }
 
-function _drawLines() {
-  for (let i = 0; i < canvasManager.lines.length; i++) {
-    if (typeof canvasManager.lines[i].geometry == 'undefined') {
-      let thisLine = canvasManager.lines[i];
-      const fs = `
-          varying vec4 vColor;
+  const fs = `
+      varying vec4 vColor;
 
-          void main(void) {
-            gl_FragColor = vec4(vColor);
-          }`;
-      const vs = `
-          attribute vec4 color;
-          varying vec4 vColor;
+      void main(void) {
+        gl_FragColor = vec4(vColor);
+      }`;
+  const vs = `
+      uniform vec4 uColor;
+      varying vec4 vColor;
 
-          void main(void) {
-            vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_Position = projectionMatrix * modelViewPosition;
-            gl_PointSize = 1.0;
+      void main(void) {
+        vec4 modelViewPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * modelViewPosition;
+        gl_PointSize = 1.0;
 
-            vColor = color;
-          }`;
+        vColor = uColor;
+      }`;
 
-      const material = new THREE.ShaderMaterial({
-        vertexShader: vs,
-        fragmentShader: fs,
-        polygonOffset: true,
-        polygonOffsetFactor: -1.0,
-        polygonOffsetUnits: 1.0,
-      });
-      material.transparent = true;
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+        uColor   : {
+            type    : "vec4",
+            value   : lineInfo.color
+        },
+    },
+    vertexShader: vs,
+    fragmentShader: fs,
+    polygonOffset: true,
+    polygonOffsetFactor: -1.0,
+    polygonOffsetUnits: 1.0,
+  });
+  material.transparent = true;
 
-      let points = [];
-      for (let i = 0; i < thisLine.length; i++) {
-        points.push( new THREE.Vector3(thisLine[i].x, thisLine[i].y, thisLine[i].z) );
+  let points = [];
+  points.push( new THREE.Vector3(lineInfo.ref[0], lineInfo.ref[1], lineInfo.ref[2]) );
+  points.push( new THREE.Vector3(lineInfo.ref2[0], lineInfo.ref2[1], lineInfo.ref2[2]) );
+
+  let geometry = new THREE.BufferGeometry().setFromPoints(points);
+  let lineObj = new THREE.Line(geometry, material);
+  canvasManager.scene.add(lineObj);
+  console.log(lineObj);
+}
+
+var drawLinesI = 0;
+var tempStar1, tempStar2;
+var satPos;
+function drawLinesLoop () {
+  if (drawLineList.length == 0) return;
+  for (drawLinesI = 0; drawLinesI < drawLineList.length; drawLinesI++) {
+    if (typeof drawLineList[drawLinesI].sat != 'undefined') {
+      // At least One Satellite
+      drawLineList[drawLinesI].sat =  satSet.getSatPosOnly(drawLineList[drawLinesI].sat.id);
+      if (typeof drawLineList[drawLinesI].sat2 != 'undefined') {
+        // Satellite and Static
+        if (typeof drawLineList[drawLinesI].sat2.name != 'undefined'){
+          if (typeof  drawLineList[drawLinesI].sat2.id == 'undefined') {
+            drawLineList[drawLinesI].sat2.id = satSet.getIdFromSensorName(drawLineList[drawLinesI].sat2.name);
+          }
+          drawLineList[drawLinesI].sat2 =  satSet.getSatPosOnly(drawLineList[drawLinesI].sat2.id);
+          drawLineList[drawLinesI].line.set([drawLineList[drawLinesI].sat.position.x,drawLineList[drawLinesI].sat.position.y,drawLineList[drawLinesI].sat.position.z], [drawLineList[drawLinesI].sat2.position.x,drawLineList[drawLinesI].sat2.position.y,drawLineList[drawLinesI].sat2.position.z]);
+        } else {
+          // Two Satellites
+          drawLineList[drawLinesI].sat2 =  satSet.getSatPosOnly(drawLineList[drawLinesI].sat2.id);
+          drawLineList[drawLinesI].line.set([drawLineList[drawLinesI].sat.position.x,drawLineList[drawLinesI].sat.position.y,drawLineList[drawLinesI].sat.position.z], [drawLineList[drawLinesI].sat2.position.x,drawLineList[drawLinesI].sat2.position.y,drawLineList[drawLinesI].sat2.position.z]);
+        }
+      } else {
+        // Just One Satellite
+        drawLineList[drawLinesI].line.set(drawLineList[drawLinesI].ref, [drawLineList[drawLinesI].sat.position.x,drawLineList[drawLinesI].sat.position.y,drawLineList[drawLinesI].sat.position.z]);
       }
-
-      var geometry = new THREE.BufferGeometry().setFromPoints(points);
-      var line = new THREE.Line(geometry, material);
-      canvasManager.lines[i] = line;
+    } else if ((typeof drawLineList[drawLinesI].star1 != 'undefined') && (typeof drawLineList[drawLinesI].star2 != 'undefined')) {
+      // Constellation
+      if (typeof drawLineList[drawLinesI].star1ID == 'undefined') { drawLineList[drawLinesI].star1ID = satSet.getIdFromStarName(drawLineList[drawLinesI].star1); }
+      if (typeof drawLineList[drawLinesI].star2ID == 'undefined') { drawLineList[drawLinesI].star2ID = satSet.getIdFromStarName(drawLineList[drawLinesI].star2); }
+      tempStar1 =  satSet.getSatPosOnly(drawLineList[drawLinesI].star1ID);
+      tempStar2 =  satSet.getSatPosOnly(drawLineList[drawLinesI].star2ID);
+      drawLineList[drawLinesI].line.set([tempStar1.position.x, tempStar1.position.y, tempStar1.position.z], [tempStar2.position.x, tempStar2.position.y,tempStar2.position.z]);
+    } else {
+      // Arbitrary Lines
+      drawLineList[drawLinesI].line.set(drawLineList[drawLinesI].ref, drawLineList[drawLinesI].ref2);
     }
-    canvasManager.scene.add(canvasManager.lines[i]);
+
+    drawLineList[drawLinesI].line.draw(drawLineList[drawLinesI].color);
   }
 }
 
@@ -1428,15 +1678,13 @@ function _camSnapToSat (sat) {
     } else {
       camDistTarget = RADIUS_OF_EARTH + settingsManager.camDistBuffer;  // Stay out of the center of the earth. You will get stuck there.
       console.warn('Zoom Calculation Error: ' + altitude + ' -- ' + camDistTarget);
-      camZoomSnappedOnSat = false;
-      camAngleSnappedOnSat = false;
     }
     if (Math.pow((camDistTarget - DIST_MIN) / (DIST_MAX - DIST_MIN), 1 / ZOOM_EXP) < zoomTarget) {
       zoomTarget = Math.pow((camDistTarget - DIST_MIN) / (DIST_MAX - DIST_MIN), 1 / ZOOM_EXP);
     }
   }
 
-  if (cameraType.current=== cameraType.PLANETARIUM) {
+  if (canvasManager.cameraManager.cameraType.current=== canvasManager.cameraManager.cameraType.PLANETARIUM) {
     zoomTarget = 0.01;
   }
 }
@@ -1447,6 +1695,15 @@ function eci2CanvasSpace(position) {
     z: position.y * -1
   };
 }
+
+function canvasSpace2Eci(position) {
+  return {
+    x: position.x,
+    y: position.z * -1,
+    z: position.y
+  };
+}
+
 function _loadOrbitControls() {
   // This set of controls performs orbiting, dollying (zooming), and panning.
   // Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
@@ -1792,8 +2049,8 @@ function _loadOrbitControls() {
 
       return function pan(deltaX, deltaY) {
         var element =
-          scope.domElement === document
-            ? scope.domElement.body
+          scope.domElement === document ?
+            scope.domElement.body
             : scope.domElement;
 
         if (scope.object.isPerspectiveCamera) {
@@ -1957,11 +2214,21 @@ function _loadOrbitControls() {
       // console.log( 'handleMouseWheel' );
 
       if (event.deltaY < 0) {
-        dollyOut(getZoomScale());
-        canvasManager.cameraManager.zoomFactor -= 75;
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          canvasManager.cameraManager.zoomFactor -= 75;
+          dollyOut(getZoomScale());
+        } else {
+          canvasManager.cameraManager.zoomFactor -= 200;
+          dollyOut(getZoomScale() * 0.95);
+        }
       } else if (event.deltaY > 0) {
-        dollyIn(getZoomScale());
-        canvasManager.cameraManager.zoomFactor += 75;
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+            canvasManager.cameraManager.zoomFactor += 75;
+            dollyIn(getZoomScale());
+        } else {
+            canvasManager.cameraManager.zoomFactor += 200;
+            dollyIn(getZoomScale() * 0.95);
+        }
       }
 
 
@@ -2089,7 +2356,7 @@ function _loadOrbitControls() {
 
     function onMouseDown(event) {
       if (scope.enabled === false) return;
-      canvasManager.controls.autoRotate = false;
+      scope.autoRotate = false;
       // Prevent the browser from scrolling.
 
       // event.preventDefault();
@@ -2103,7 +2370,7 @@ function _loadOrbitControls() {
         case scope.mouseButtons.LEFT:
           if (event.ctrlKey || event.metaKey || event.shiftKey) {
             if (scope.enablePan === false) return;
-
+            scope.screenSpacePanning = false;
             handleMouseDownPan(event);
 
             state = STATE.PAN;
@@ -2128,7 +2395,7 @@ function _loadOrbitControls() {
 
         case scope.mouseButtons.RIGHT:
           if (scope.enablePan === false) return;
-
+          scope.screenSpacePanning = true;
           handleMouseDownPan(event);
 
           state = STATE.PAN;
@@ -2194,7 +2461,7 @@ function _loadOrbitControls() {
       )
         return;
 
-      // event.preventDefault();
+      event.preventDefault();
       event.stopPropagation();
 
       scope.dispatchEvent(startEvent);

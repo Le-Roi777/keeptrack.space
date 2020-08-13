@@ -66,7 +66,7 @@ or mirrored at any other location without the express written permission of the 
   var tutIconDOM = $('#tutorial-icon');
   var curFocusDOM;
   $(document).ready(function () { // Code Once index.htm is loaded
-    var wasAdviceEnabled = (!settingsManager.offline) ? localStorage.getItem("isAdviceEnabled") : null;
+    var wasAdviceEnabled = (!settingsManager.unofficialSite) ? localStorage.getItem("isAdviceEnabled") : null;
     if (wasAdviceEnabled == "true" || wasAdviceEnabled == null) {
       adviceManager.on();
       adviceList.welcome();
@@ -187,11 +187,11 @@ or mirrored at any other location without the express written permission of the 
     if (adviceCount.satelliteView < 1) {
       adviceCount.satelliteView += 1;
 
-      adviceManager.showAdvice("Satellite Camera View",
-      "Did you know you can change the camera to show what a satellite sees? You have to " +
-      "have a satellite currently selected to use it.",
-      $('#menu-satview'),
-      "bottom");
+      // adviceManager.showAdvice("Satellite Camera View",
+      // "Did you know you can change the camera to show what a satellite sees? You have to " +
+      // "have a satellite currently selected to use it.",
+      // $('#menu-satview'),
+      // "bottom");
     } else if (adviceCount.newLaunch < 1) {
       // Only Do this Twice
       adviceCount.newLaunch += 1;
@@ -225,11 +225,11 @@ or mirrored at any other location without the express written permission of the 
     } else if (adviceCount.satelliteView < 3) {
       adviceCount.satelliteView += 1;
 
-      adviceManager.showAdvice("Satellite Camera View",
-      "Did you know you can change the camera to show what a satellite sees? You have to " +
-      "have a satellite currently selected to use it.",
-      $('#menu-satview'),
-      "bottom");
+      // adviceManager.showAdvice("Satellite Camera View",
+      // "Did you know you can change the camera to show what a satellite sees? You have to " +
+      // "have a satellite currently selected to use it.",
+      // $('#menu-satview'),
+      // "bottom");
     } else if (adviceCount.newLaunch < 3) {
       // Only Do this Twice
       adviceCount.newLaunch += 1;
@@ -522,12 +522,12 @@ or mirrored at any other location without the express written permission of the 
     return isAdviceEnabled;
   };
   adviceManager.on = function () {
-    if (!settingsManager.offline) { localStorage.setItem("isAdviceEnabled", true); }
+    if (!settingsManager.unofficialSite) { localStorage.setItem("isAdviceEnabled", true); }
     isAdviceEnabled = true;
     tutIconDOM.addClass('bmenu-item-selected');
   };
   adviceManager.off = function () {
-    if (!settingsManager.offline) { localStorage.setItem("isAdviceEnabled", false); }
+    if (!settingsManager.unofficialSite) { localStorage.setItem("isAdviceEnabled", false); }
     isAdviceEnabled = false;
     helpDOM.hide();
     tutIconDOM.removeClass('bmenu-item-selected');

@@ -73,11 +73,12 @@ db.init = (function (){
   settingsManager.vectorImages = false;
 
   if (window.location.hostname === 'keeptrack.space' ||
-      window.location.hostname === 'localhost' ||
+      // window.location.hostname === 'localhost' ||
       window.location.hostname === 'thkruz.github.io') {
     settingsManager.offline = false;
   } else {
     settingsManager.offline = true;
+    settingsManager.unofficialSite = true;
   }
 
   let lastMap = localStorage.getItem("lastMap");
@@ -247,6 +248,12 @@ db.init = (function (){
   settingsManager.limitSats = '';
   settingsManager.searchLimit = 400;
 
+  settingsManager.canvasManager = {};
+  settingsManager.canvasManager.satPointMinSize = 4.0; // MUST BE A FLOAT
+  settingsManager.canvasManager.satPointMaxSize = 60.0; // MUST BE A FLOAT
+
+  settingsManager.canvasManager.defaultCameraDistanceFromEarth = 44105;
+
   settingsManager.fieldOfView = 0.6;
   settingsManager.fieldOfViewMin = 0.04; // 4 Degrees (I think)
   settingsManager.fieldOfViewMax = 1.2; // 120 Degrees (I think)
@@ -304,12 +311,14 @@ db.init = (function (){
 
   settingsManager.gpsElevationMask = 15;
 
-  settingsManager.fpsForwardSpeed = 3;
-  settingsManager.fpsSideSpeed = 3;
-  settingsManager.fpsVertSpeed = 3;
+  settingsManager.uiManager = {};
+  settingsManager.uiManager.keyManager = {};
+  settingsManager.uiManager.keyManager.fpsForwardSpeed = 3;
+  settingsManager.uiManager.keyManager.fpsSideSpeed = 3;
+  settingsManager.uiManager.keyManager.fpsVertSpeed = 3;
   settingsManager.fpsPitchRate = 0.02;
-  settingsManager.fpsYawRate = 0.02;
-  settingsManager.fpsRotateRate = 0.02;
+  settingsManager.uiManager.keyManager.fpsYawRate = 0.02;
+  settingsManager.uiManager.keyManager.fpsRotateRate = 0.02;
 
   settingsManager.daysUntilObjectLost = 60;
 
@@ -343,7 +352,9 @@ settingsManager.satShader.maxAllowedSize = 100.0;
   settingsManager.reColorMinimumTime = 1000;
   settingsManager.colors = {};
   settingsManager.colors = JSON.parse(localStorage.getItem("settingsManager-colors"));
-  if (settingsManager.colors == null || settingsManager.colors.version !== '1.0.3') {
+  if (settingsManager.colors == null ||
+      settingsManager.colors.version !== '1.0.3' ||
+      settingsManager.unofficialSite) {
     settingsManager.colors = {};
     settingsManager.colors.version = '1.0.3';
     settingsManager.colors.facility = [0.64, 0.0, 0.64, 1.0];

@@ -1056,27 +1056,29 @@ var hoveringSat = -1;
     }
   };
 
-  var posVec4;
-  satSet.getScreenCoords = (i, pMatrix, camMatrix, pos) => {
+  satSet.getScreenCoords = (i, pos) => {
+    // TODO: satSet.getScreenCoords output incorrect
+    let posVec3 = new THREE.Vector3();
     satScreenPositionArray.error = false;
-    if (!pos) pos = satSet.getSatPosOnly(i).position;
-    posVec4 = vec4.fromValues(pos.x, pos.y, pos.z, 1);
-    // var transform = mat4.create();
 
-    vec4.transformMat4(posVec4, posVec4, camMatrix);
-    vec4.transformMat4(posVec4, posVec4, pMatrix);
+    if (typeof pos == 'undefined') pos = eci2CanvasSpace(satSet.getSat(i).position);
+    if (typeof pos == 'undefined') return;
 
-    satScreenPositionArray.x = (posVec4[0] / posVec4[3]);
-    satScreenPositionArray.y = (posVec4[1] / posVec4[3]);
-    satScreenPositionArray.z = (posVec4[2] / posVec4[3]);
+    posVec3.set( pos.x, pos.y, pos.z );
 
-    satScreenPositionArray.x = (satScreenPositionArray.x + 1) * 0.5 * window.innerWidth;
-    satScreenPositionArray.y = (-satScreenPositionArray.y + 1) * 0.5 * window.innerHeight;
+    // map to normalized device coordinate (NDC) space
+    posVec3.project( canvasManager.camera );
 
-    if (satScreenPositionArray.x >= 0 && satScreenPositionArray.y >= 0 && satScreenPositionArray.z >= 0 && satScreenPositionArray.z <= 1) {
-      // Passed Test
+    // map to 2D screen space
+    posVec3.x = Math.round( (   posVec3.x + 1 ) * canvasManager.renderer.domElement.width  / 2 );
+    posVec3.y = Math.round( ( - posVec3.y + 1 ) * canvasManager.renderer.domElement.height / 2 );
+    posVec3.z = 0;
+
+    if (posVec3.x >= 0 && posVec3.y >= 0) {
+      return posVec3;
     } else {
-      satScreenPositionArray.error = true;
+      console.log(`Object ${i} is not on the screen!`);
+      return;
     }
   };
 
