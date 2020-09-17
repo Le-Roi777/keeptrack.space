@@ -222,7 +222,8 @@ function initializeKeepTrack() {
     earth.init();
     if (!settingsManager.enableLimitedUI && !settingsManager.isDrawLess) {
         atmosphere.init();
-        moon.init();
+        // Disabling Moon Until it is Fixed
+        // moon.init();
     }
     ColorScheme.init();
     $('#loader-text').text('Drawing Dots in Space...');
@@ -962,7 +963,8 @@ function _drawScene() {
 
     if (!settingsManager.enableLimitedUI && !settingsManager.isDrawLess) {
         sun.draw(pMatrix, camMatrix);
-        moon.draw(pMatrix, camMatrix);
+        // Disabling Moon Until it is Fixed
+        // moon.draw(pMatrix, camMatrix);
     }
     earth.update();
     if (!settingsManager.enableLimitedUI && !settingsManager.isDrawLess) {
@@ -1075,6 +1077,7 @@ function _drawScene() {
                             return;
                         }
 
+                        // Is this a GPS Satellite (Called NAVSTAR)
                         if (
                             sat.ON.slice(0, 7) == 'NAVSTAR' ||
                             sat.ON.slice(10, 17) == 'NAVSTAR'
@@ -1083,6 +1086,20 @@ function _drawScene() {
                                 meshManager.selectedSatPosition;
                             meshManager.drawObject(
                                 meshManager.models.gps,
+                                pMatrix,
+                                camMatrix,
+                                sat,
+                                true
+                            );
+                            return;
+                        }
+
+                        // Is this a Galileo Satellite
+                        if (sat.ON.slice(0, 7) == 'GALILEO') {
+                            meshManager.models.galileo.position =
+                                meshManager.selectedSatPosition;
+                            meshManager.drawObject(
+                                meshManager.models.galileo,
                                 pMatrix,
                                 camMatrix,
                                 sat,
@@ -1223,41 +1240,41 @@ function _drawScene() {
 
                     if (sat.OT == 3) {
                         if (sat.SCC_NUM <= 20000) {
-                          // Debris
-                          meshManager.models.debris0.position =
-                          meshManager.selectedSatPosition;
-                          meshManager.drawObject(
-                            meshManager.models.debris0,
-                            pMatrix,
-                            camMatrix,
-                            sat,
-                            false
-                          );
-                          return;
+                            // Debris
+                            meshManager.models.debris0.position =
+                                meshManager.selectedSatPosition;
+                            meshManager.drawObject(
+                                meshManager.models.debris0,
+                                pMatrix,
+                                camMatrix,
+                                sat,
+                                false
+                            );
+                            return;
                         } else if (sat.SCC_NUM <= 35000) {
-                          // Debris
-                          meshManager.models.debris1.position =
-                          meshManager.selectedSatPosition;
-                          meshManager.drawObject(
-                            meshManager.models.debris1,
-                            pMatrix,
-                            camMatrix,
-                            sat,
-                            false
-                          );
-                          return;
+                            // Debris
+                            meshManager.models.debris1.position =
+                                meshManager.selectedSatPosition;
+                            meshManager.drawObject(
+                                meshManager.models.debris1,
+                                pMatrix,
+                                camMatrix,
+                                sat,
+                                false
+                            );
+                            return;
                         } else if (sat.SCC_NUM > 35000) {
-                          // Debris
-                          meshManager.models.debris2.position =
-                          meshManager.selectedSatPosition;
-                          meshManager.drawObject(
-                            meshManager.models.debris2,
-                            pMatrix,
-                            camMatrix,
-                            sat,
-                            false
-                          );
-                          return;
+                            // Debris
+                            meshManager.models.debris2.position =
+                                meshManager.selectedSatPosition;
+                            meshManager.drawObject(
+                                meshManager.models.debris2,
+                                pMatrix,
+                                camMatrix,
+                                sat,
+                                false
+                            );
+                            return;
                         }
                     }
                 }
@@ -3151,9 +3168,6 @@ $(document).ready(function () {
         settingsManager.isResizing = true;
     });
 
-    // TODO: Migrate All Mouse/Touch events under this single document ready
-    // listener so that they are scoped to the window and easier to manage
-    // and isolate from other files.
     $(window).mousedown(function (evt) {
         // Camera Manager Events
         {
@@ -3556,6 +3570,8 @@ $(document).ready(function () {
                     if (
                         satSet.getSat(clickedSat).type === 'Optical' ||
                         satSet.getSat(clickedSat).type === 'Mechanical' ||
+                        satSet.getSat(clickedSat).type ===
+                            'Ground Sensor Station' ||
                         satSet.getSat(clickedSat).type === 'Phased Array Radar'
                     ) {
                         $('#view-sensor-info-rmb').show();
@@ -4305,6 +4321,7 @@ $(document).ready(function () {
                 case 'clear-screen-rmb':
                     (function clearScreenRMB() {
                         searchBox.hideResults();
+                        uiManager.hideSideMenus();
                         isMilSatSelected = false;
                         $('#menu-space-stations').removeClass(
                             'bmenu-item-selected'
