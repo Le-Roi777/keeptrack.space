@@ -69,7 +69,7 @@ or mirrored at any other location without the express written permission of the 
         let distanceApart = Math.sqrt(
             distanceApartX + distanceApartY + distanceApartZ
         ).toFixed(0);
-        return '<br />' + distanceApart + ' km';
+        return '<br />Range: ' + distanceApart + ' km';
     };
 
     // TODO: UI element changes/references should be moved to ui.js
@@ -642,7 +642,7 @@ or mirrored at any other location without the express written permission of the 
                         timeManager.dateFormat(
                             multiSiteArray[i].time,
                             'isoDateTime',
-                            false
+                            true
                         )
                     )
                 );
@@ -681,7 +681,7 @@ or mirrored at any other location without the express written permission of the 
             let isInFOV = satellite.checkIsInFOV(sensor, aer);
             if (isInFOV) {
                 return {
-                    time: now,
+                    time: now.toISOString(),
                     el: elevation,
                     az: azimuth,
                     rng: range,
@@ -1040,7 +1040,7 @@ or mirrored at any other location without the express written permission of the 
                         // console.log('Found Wrong Lat');
                     }
                 } else {
-                    console.log('Failed Arg of Per Calc');
+                    // console.log('Failed Arg of Per Calc');
                 }
                 if (argPerCalcResults === 5) {
                     i += 5 * 10; // Change ArgPer faster

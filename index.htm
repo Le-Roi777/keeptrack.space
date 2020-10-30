@@ -1,8 +1,19 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="preload" href="css/fonts/nasalization-rg.woff2" as="font" crossorigin="anonymous">
-    <script src="js/keeptrack-head.js"></script>
+    <meta charset="utf-8" />
+    <link rel="canonical" href="https://www.keeptrack.space"/>
+    <script src="js/keeptrack-head.js?v=1.20.6"></script>
+    <script>
+      var refreshing;
+      navigator.serviceWorker.addEventListener('controllerchange',
+      function() {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      }
+      );
+    </script>
     <meta
         name="description"
         content="A 3D visualtion tool to learn about satellites and tracking radars."
@@ -20,8 +31,10 @@
         content="A 3D visualtion tool to learn about satellites and tracking radars."
     />
     <meta property="og:url" content="http://keeptrack.space" />
-
-    <meta charset="utf-8" />
+    <link rel='shortcut icon' type='image/x-icon' href='./favicon.ico' />
+    <link rel="manifest" href="./manifest.webmanifest">
+    <meta name="theme-color" content="#1f3347"/>
+    <link rel="apple-touch-icon" href="./images/logo192.png">
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=0"
@@ -35,7 +48,8 @@
             // but it only runs on the main website
             if (
                 window.location.protocol === 'http:' &&
-                window.location.hostname === 'keeptrack.space'
+                (window.location.hostname === 'keeptrack.space' ||
+                window.location.hostname === 'www.keeptrack.space')
             ) {
                 var httpURL =
                     window.location.hostname +
@@ -1030,14 +1044,46 @@
                   </div>
                 </div>
               </div>
-              <div id="satcom-menu" class="side-menu-parent start-hidden text-select">
-                <div id="satcom-inner-menu" class="side-menu">
+              <div id="external-menu" class="side-menu-parent start-hidden text-select">
+                <div id="external-inner-menu" class="side-menu">
                   <ul>
-                    <h5 class="center-align">Satellite Communication</h5>
+                    <h5 class="center-align">External TLE Menu</h5>
                     <li class="divider"></li>
-                    <li class="menu-selectable" data-satcom="aehf">Milstar and AEHF</li>
-                    <li class="menu-selectable" data-satcom="wgs">DSCS and WGS</li>
                   </ul>
+                  <h5 class="center-align">N2YO Lookup</h5>
+                  <li class="divider"></li>
+                  <div class="row"></div>
+                  <form id="n2yo-form">
+                    <div class="row">
+                      <div class="input-field col s12">
+                        <input value="25544" id="ext-n2yo" type="text">
+                        <label for="anal-sat">Satellite Number</label>
+                      </div>
+                    </div>
+                    <div class="row">
+                      <center>
+                        <button id="n2yo-submit" class="btn btn-ui waves-effect waves-light" type="submit"
+                          name="action">Load TLE &#9658;</button>
+                      </center>
+                    </div>
+                  </form>
+                  <h5 class="center-align">Celestrak Lookup</h5>
+                  <li class="divider"></li>
+                  <div class="row"></div>
+                  <form id="celestrak-form">
+                    <div class="row">
+                      <div class="input-field col s12">
+                        <input value="25544" id="ext-celestrak" type="text">
+                        <label for="anal-sat">Satellite Number</label>
+                      </div>
+                    </div>
+                    <div class="row">
+                      <center>
+                        <button id="celestrak-submit" class="btn btn-ui waves-effect waves-light" type="submit"
+                          name="action">Load TLE &#9658;</button>
+                      </center>
+                    </div>
+                  </form>
                 </div>
               </div>
               <div id="countries-menu" class="side-menu-parent start-hidden text-select">
@@ -1062,11 +1108,13 @@
                   <ul>
                     <h5 class="center-align">Constellations</h5>
                     <li class="divider"></li>
-                    <li class="menu-selectable country-option" data-group="SpaceStations">Space Stations</li>
-                    <li class="menu-selectable country-option" data-group="GPSGroup">GPS Satellites</li>
-                    <li class="menu-selectable country-option" data-group="GalileoGroup">Galileo Satellites</li>
-                    <li class="menu-selectable country-option" data-group="GlonassGroup">Glonass Satellites</li>
-                    <li class="menu-selectable country-option" data-group="AmatuerRadio">Amateur Radio</li>
+                    <li class="menu-selectable" data-group="aehf">Milstar and AEHF</li>
+                    <li class="menu-selectable" data-group="wgs">DSCS and WGS</li>
+                    <li class="menu-selectable" data-group="starlink">Starlink</li>
+                    <li class="menu-selectable" data-group="GPSGroup">GPS Satellites</li>
+                    <li class="menu-selectable" data-group="GalileoGroup">Galileo Satellites</li>
+                    <li class="menu-selectable" data-group="GlonassGroup">Glonass Satellites</li>
+                    <li class="menu-selectable" data-group="AmatuerRadio">Amateur Radio</li>
                   </ul>
                 </div>
               </div>
@@ -1376,7 +1424,7 @@
                 <img id="map-look48" class="lazyload map-item map-look" data-src="images/red-square.png" width="7px" height="7px">
                 <img id="map-look49" class="lazyload map-item map-look" data-src="images/red-square.png" width="7px" height="7px">
                 <img id="map-look50" class="lazyload map-item map-look" data-src="images/red-square.png" width="7px" height="7px">
-                <div id="braun-credit" style="position:absolute;right:10px;bottom:10px;z-index:5;color:#1f3347;">
+                <div id="braun-credit" style="position:fixed;right:10px;bottom:10px;z-index:5;color:#1f3347;">
                   Braun Stereographic Projection (c) Tobias Jung
                 </div>
               </div>
@@ -1570,6 +1618,12 @@
                         public sources. US Sensor data was derived from MDA reports on enviromental impacts and
                         congressional
                         budget reports.
+                      </div>
+                    </div>
+                    <br>
+                    <div class="row">
+                      <h5 class="center-align">Version</h5>
+                      <div id="versionNumber-text" class="col s12">
                       </div>
                     </div>
                   </div>

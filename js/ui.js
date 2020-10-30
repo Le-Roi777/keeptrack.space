@@ -104,7 +104,7 @@ var speedModifier = 1;
     var isConstellationsMenuOpen = false;
     var isCountriesMenuOpen = false;
     var isMilSatSelected = false;
-    var isSatcomMenuOpen = false;
+    var isExternalMenuOpen = false;
     var isSocratesMenuOpen = false;
     var isNextLaunchMenuOpen = false;
     var issatChngMenuOpen = false;
@@ -122,6 +122,7 @@ var speedModifier = 1;
     $(document).ready(function () {
         // Code Once index.htm is loaded
         if (settingsManager.offline) updateInterval = 250;
+        $('#versionNumber-text').innerHTML = `${settingsManager.versionNumber} - ${settingsManager.versionDate}`;
         (function _licenseCheck() {
             db.log('_licenseCheck');
             if (typeof satel === 'undefined') satel = null;
@@ -1651,6 +1652,24 @@ var speedModifier = 1;
                 e.preventDefault();
             });
 
+            $('#n2yo-form').on('submit', function (e) {
+                $('#loading-screen').fadeIn('slow', function () {
+                  let satnum = $('#ext-n2yo').val() * 1;
+                  satSet.searchN2yo(satnum);
+                  $('#loading-screen').fadeOut();
+                });
+                e.preventDefault();
+            });
+
+            $('#celestrak-form').on('submit', function (e) {
+                $('#loading-screen').fadeIn('slow', function () {
+                  let satnum = $('#ext-celestrak').val() * 1;
+                  satSet.searchCelestrak(satnum);
+                  $('#loading-screen').fadeOut();
+                });
+                e.preventDefault();
+            });
+
             $('#editSat-newTLE').on('click', function (e) {
                 $('#loading-screen').fadeIn('slow', function () {
                     // Update Satellite TLE so that Epoch is Now but ECI position is very very close
@@ -2441,7 +2460,7 @@ var speedModifier = 1;
                         }
                     }
                     breakupSearchString += mainsat.SCC_NUM + ',Analyst Sat';
-                    searchBox.doSearch($('#search').val());
+                    searchBox.doSearch(breakupSearchString);
 
                     $('#loading-screen').fadeOut();
                 });
@@ -2460,11 +2479,7 @@ var speedModifier = 1;
                     var tgtLon = $('#ms-lon').val() * 1;
                     // var result = false;
 
-                    var launchTime = timeManager.selectedDate;
-                    launchTime = launchTime.split(' ');
-                    launchTime = new Date(
-                        launchTime[0] + 'T' + launchTime[1] + 'Z'
-                    ).getTime();
+                    let launchTime = timeManager.selectedDate * 1;
 
                     if (type > 0) {
                         if (type === 1)
@@ -3193,6 +3208,9 @@ var speedModifier = 1;
                 timeManager.propTime();
             } // Allows passing -1 argument to socrates function to skip these steps
         }
+        uiManager.bottomIconPress = (evt) => {
+          _bottomIconPress(evt)
+        };
         function _bottomIconPress(evt) {
             db.log('_bottomIconPress');
             db.log(evt.currentTarget.id);
@@ -3461,22 +3479,22 @@ var speedModifier = 1;
                         break;
                     }
                     break;
-                case 'menu-satcom':
-                    if (isSatcomMenuOpen) {
-                        isSatcomMenuOpen = false;
-                        $('#menu-satcom').removeClass('bmenu-item-selected');
+                case 'menu-external':
+                    if (isExternalMenuOpen) {
+                        isExternalMenuOpen = false;
+                        $('#menu-external').removeClass('bmenu-item-selected');
                         uiManager.hideSideMenus();
                         break;
                     } else {
                         uiManager.hideSideMenus();
-                        $('#satcom-menu').effect(
+                        $('#external-menu').effect(
                             'slide',
                             { direction: 'left', mode: 'show' },
                             1000
                         );
                         uiManager.updateWatchlist();
-                        isSatcomMenuOpen = true;
-                        $('#menu-satcom').addClass('bmenu-item-selected');
+                        isExternalMenuOpen = true;
+                        $('#menu-external').addClass('bmenu-item-selected');
                         break;
                     }
                     break;
@@ -3613,10 +3631,14 @@ var speedModifier = 1;
                         if (settingsManager.isMobileModeEnabled)
                             mobile.searchToggle(false);
                         uiManager.hideSideMenus();
+                        settingsManager.isPreventColorboxClose = true;
+                        setTimeout(function () {
+                          settingsManager.isPreventColorboxClose = false;
+                        }, 2000);
                         if (location.protocol === 'https:') {
                             $.colorbox({
                                 href:
-                                    'https://space.skyrocket.de/doc_chr/lau2020.htm',
+                                  'https://space.skyrocket.de/doc_chr/lau2020.htm',
                                 iframe: true,
                                 width: '80%',
                                 height: '80%',
@@ -3626,7 +3648,7 @@ var speedModifier = 1;
                         } else {
                             $.colorbox({
                                 href:
-                                    'http://space.skyrocket.de/doc_chr/lau2020.htm',
+                                  'http://space.skyrocket.de/doc_chr/lau2020.htm',
                                 iframe: true,
                                 width: '80%',
                                 height: '80%',
@@ -4395,7 +4417,7 @@ var speedModifier = 1;
                 { direction: 'left', mode: 'hide' },
                 1000
             );
-            $('#satcom-menu').effect(
+            $('#external-menu').effect(
                 'slide',
                 { direction: 'left', mode: 'hide' },
                 1000
@@ -4446,7 +4468,7 @@ var speedModifier = 1;
             $('#menu-nextLaunch').removeClass('bmenu-item-selected');
             $('#menu-breakup').removeClass('bmenu-item-selected');
             $('#menu-missile').removeClass('bmenu-item-selected');
-            $('#menu-satcom').removeClass('bmenu-item-selected');
+            $('#menu-external').removeClass('bmenu-item-selected');
             $('#menu-analysis').removeClass('bmenu-item-selected');
             $('#menu-customSensor').removeClass('bmenu-item-selected');
             $('#menu-color-scheme').removeClass('bmenu-item-selected');
@@ -4477,7 +4499,7 @@ var speedModifier = 1;
             isCustomSensorMenuOpen = false;
             isColorSchemeMenuOpen = false;
             isAnalysisMenuOpen = false;
-            isSatcomMenuOpen = false;
+            isExternalMenuOpen = false;
             isConstellationsMenuOpen = false;
             isCountriesMenuOpen = false;
             isAboutSelected = false;
@@ -4973,15 +4995,15 @@ var speedModifier = 1;
             }
 
             if (settingsManager.isPropRateChange) {
-                satCruncher.postMessage({
-                    typ: 'offset',
-                    dat:
-                        timeManager.propOffset.toString() +
-                        ' ' +
-                        timeManager.propRate.toString(),
-                });
-                timeManager.propRealTime = Date.now();
-                timeManager.propTime();
+              timeManager.propRealTime = Date.now();
+              timeManager.propTime();
+              satCruncher.postMessage({
+                  typ: 'offset',
+                  dat:
+                      timeManager.propOffset.toString() +
+                      ' ' +
+                      timeManager.propRate.toString(),
+              });
             }
         };
         function browserUnsupported() {
@@ -5169,13 +5191,13 @@ var speedModifier = 1;
         if (sat.static) return;
 
         // IDEA: Include updates when satellite edited regardless of time.
-        if (timeManager.now > lastBoxUpdateTime * 1 + updateInterval) {
+        if (timeManager.now * 1> lastBoxUpdateTime * 1 + updateInterval) {
             if (!sat.missile) {
                 if (objectManager.isSensorManagerLoaded) {
                     sat.getTEARR();
                 }
             } else {
-                missileManager.getMissileTEARR(sat);
+                uiManager.currentTEARR = missileManager.getMissileTEARR(sat);
             }
             if (satellite.degreesLong(uiManager.currentTEARR.lon) >= 0) {
                 $('#sat-longitude').html(
@@ -5214,7 +5236,12 @@ var speedModifier = 1;
                 settingsManager.lastMapUpdateTime = timeManager.now;
             }
 
-            $('#sat-altitude').html(sat.getAltitude().toFixed(2) + ' km');
+            if (!sat.missile) {
+                $('#sat-altitude').html(sat.getAltitude().toFixed(2) + ' km');
+            } else {
+                $('#sat-altitude').html(uiManager.currentTEARR.alt.toFixed(2) + ' km');
+            }
+
             $('#sat-velocity').html(sat.velocity.toFixed(2) + ' km/s');
             if (objectManager.isSensorManagerLoaded) {
                 if (uiManager.currentTEARR.inview) {
@@ -5228,21 +5255,21 @@ var speedModifier = 1;
                         uiManager.currentTEARR.range.toFixed(2) + ' km'
                     );
                 } else {
-                    $('#sat-azimuth').html('Out of Bounds');
+                    $('#sat-azimuth').html('Out of FOV');
                     $('#sat-azimuth').prop(
                         'title',
                         'Azimuth: ' +
                             uiManager.currentTEARR.azimuth.toFixed(0) +
                             '°'
                     );
-                    $('#sat-elevation').html('Out of Bounds');
+                    $('#sat-elevation').html('Out of FOV');
                     $('#sat-elevation').prop(
                         'title',
                         'Elevation: ' +
                             uiManager.currentTEARR.elevation.toFixed(1) +
                             '°'
                     );
-                    $('#sat-range').html('Out of Bounds');
+                    $('#sat-range').html('Out of FOV');
                     $('#sat-range').prop(
                         'title',
                         'Range: ' +
@@ -5293,41 +5320,6 @@ var speedModifier = 1;
             }
         }
     }
-
-    $('#satcom-inner-menu>ul>li').on('click', function () {
-        selectSat(-1); // clear selected sat
-        var satcomName = $(this).data('satcom');
-        switch (satcomName) {
-            case 'aehf':
-                $('#loading-screen').fadeIn('slow', function () {
-                    drawLineList = [];
-                    satCommManager.showLinks('aehf');
-                    if (settingsManager.isOfficialWebsite)
-                        ga('send', 'event', 'Satcom Menu', 'aehf', 'Selected');
-                    $('#loading-screen').fadeOut();
-                    $('#satcom-menu').effect(
-                        'slide',
-                        { direction: 'left', mode: 'show' },
-                        1000
-                    );
-                });
-                break;
-            case 'wgs':
-                $('#loading-screen').fadeIn('slow', function () {
-                    drawLineList = [];
-                    satCommManager.showLinks('wgs');
-                    if (settingsManager.isOfficialWebsite)
-                        ga('send', 'event', 'Satcom Menu', 'wgs', 'Selected');
-                    $('#loading-screen').fadeOut();
-                    $('#satcom-menu').effect(
-                        'slide',
-                        { direction: 'left', mode: 'show' },
-                        1000
-                    );
-                });
-                break;
-        }
-    });
 
     $('#colors-menu>ul>li').on('click', function () {
         selectSat(-1); // clear selected sat
@@ -6241,142 +6233,80 @@ var speedModifier = 1;
                     ]);
                 }
                 break;
-            case 'MilitarySatellites':
-                if (typeof groups.MilitarySatellites == 'undefined') {
-                    // SCC#s based on Uninon of Concerned Scientists
-                    groups.MilitarySatellites = new groups.SatGroup('objNum', [
-                        40420,
-                        41394,
-                        32783,
-                        35943,
-                        36582,
-                        40353,
-                        40555,
-                        41032,
-                        38010,
-                        38008,
-                        38007,
-                        38009,
-                        37806,
-                        41121,
-                        41579,
-                        39030,
-                        39234,
-                        28492,
-                        36124,
-                        39194,
-                        36095,
-                        40358,
-                        40258,
-                        37212,
-                        37398,
-                        38995,
-                        40296,
-                        40900,
-                        39650,
-                        27434,
-                        31601,
-                        36608,
-                        28380,
-                        28521,
-                        36519,
-                        39177,
-                        40699,
-                        34264,
-                        36358,
-                        39375,
-                        38248,
-                        34807,
-                        28908,
-                        32954,
-                        32955,
-                        32956,
-                        35498,
-                        35500,
-                        37152,
-                        37154,
-                        38733,
-                        39057,
-                        39058,
-                        39059,
-                        39483,
-                        39484,
-                        39485,
-                        39761,
-                        39762,
-                        39763,
-                        40920,
-                        40921,
-                        40922,
-                        39765,
-                        29658,
-                        31797,
-                        32283,
-                        32750,
-                        33244,
-                        39208,
-                        26694,
-                        40614,
-                        20776,
-                        25639,
-                        26695,
-                        30794,
-                        32294,
-                        33055,
-                        39034,
-                        28946,
-                        33751,
-                        33752,
-                        27056,
-                        27057,
-                        27464,
-                        27465,
-                        27868,
-                        27869,
-                        28419,
-                        28420,
-                        28885,
-                        29273,
-                        32476,
-                        31792,
-                        36834,
-                        37165,
-                        37875,
-                        37941,
-                        38257,
-                        38354,
-                        39011,
-                        39012,
-                        39013,
-                        39239,
-                        39240,
-                        39241,
-                        39363,
-                        39410,
-                        40109,
-                        40111,
-                        40143,
-                        40275,
-                        40305,
-                        40310,
-                        40338,
-                        40339,
-                        40340,
-                        40362,
-                        40878,
-                        41026,
-                        41038,
-                        41473,
-                        28470,
-                        37804,
-                        37234,
-                        29398,
-                        40110,
-                        39209,
-                        39210,
-                        36596,
-                    ]);
+            case 'aehf':
+                if (typeof groups.aehf == 'undefined') {
+                  groups.aehf = new groups.SatGroup(
+                    'objNum',
+                    satSet.convertIdArrayToSatnumArray(satLinkManager.aehf)
+                  );
                 }
+                $('#loading-screen').fadeIn('slow', function () {
+                    drawLineList = [];
+                    satLinkManager.showLinks('aehf');
+                    if (settingsManager.isOfficialWebsite)
+                        ga('send', 'event', 'SatLink Menu', 'aehf', 'Selected');
+                    $('#loading-screen').fadeOut();
+                });
+                break;
+            case 'wgs':
+                // WGS also selects DSCS
+                if (typeof groups.wgs == 'undefined') {
+                  groups.wgs = new groups.SatGroup(
+                    'objNum',
+                    satSet.convertIdArrayToSatnumArray(satLinkManager.wgs.concat(satLinkManager.dscs))
+                  );
+                }
+                $('#loading-screen').fadeIn('slow', function () {
+                    drawLineList = [];
+                    try {
+                      satLinkManager.showLinks('wgs');
+                    } catch (e) {
+                      // Maybe the satLinkManager isn't installed?
+                    }
+                    if (settingsManager.isOfficialWebsite)
+                        ga('send', 'event', 'SatLink Menu', 'wgs', 'Selected');
+                    $('#loading-screen').fadeOut();
+                });
+                break;
+            case 'starlink':
+                // WGS also selects DSCS
+                if (typeof groups.starlink == 'undefined') {
+                  groups.starlink = new groups.SatGroup(
+                    'objNum',
+                    satSet.convertIdArrayToSatnumArray(satLinkManager.starlink)
+                  );
+                }
+                $('#loading-screen').fadeIn('slow', function () {
+                    drawLineList = [];
+                    try {
+                      satLinkManager.showLinks('starlink');
+                    } catch (e) {
+                      // Maybe the satLinkManager isn't installed?
+                    }
+                    if (settingsManager.isOfficialWebsite)
+                        ga('send', 'event', 'SatLink Menu', 'starlink', 'Selected');
+                    $('#loading-screen').fadeOut();
+                });
+                break;
+            case 'sbirs':
+                // SBIRS and DSP
+                if (typeof groups.sbirs == 'undefined') {
+                  groups.sbirs = new groups.SatGroup(
+                    'objNum',
+                    satSet.convertIdArrayToSatnumArray(satLinkManager.sbirs)
+                  );
+                }
+                $('#loading-screen').fadeIn('slow', function () {
+                    drawLineList = [];
+                    try {
+                      satLinkManager.showLinks('sbirs');
+                    } catch (e) {
+                      // Maybe the satLinkManager isn't installed?
+                    }
+                    if (settingsManager.isOfficialWebsite)
+                        ga('send', 'event', 'SatLink Menu', 'sbirs', 'Selected');
+                    $('#loading-screen').fadeOut();
+                });
                 break;
         }
         _groupSelected(groupName);
@@ -6384,6 +6314,8 @@ var speedModifier = 1;
     });
     _groupSelected = function (groupName) {
         groups.selectGroup(groups[groupName]);
+
+        console.log(groups[groupName]);
 
         $search.val('');
 

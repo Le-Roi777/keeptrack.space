@@ -57,6 +57,7 @@ var emptyMat4 = mat4.create();
             settingsManager.installDirectory + 'js/sat-cruncher.js'
         );
     } catch (E) {
+        console.log(E);
         browserUnsupported();
     }
 
@@ -75,13 +76,25 @@ var emptyMat4 = mat4.create();
         satSet.loadTLEs(resp);
       })
       .fail(function () {
-        // Sometimes network firewall's hate .json so use a .js
-        $.getScript('/offline/tle.js', function () {
-          satSet.loadTLEs(jsTLEfile);
+        // Disable Caching
+        // Try using a cached version - mainly for serviceWorker
+        $.get({
+          url: '' + tleSource,
+          cache: true
+        }).done(function (resp) {
+          // if the .json loads then use it
+          satSet.loadTLEs(resp);
+        })
+        .fail(function () {
+          // Try the js file without caching
+          $.getScript('offline/tle.js', function () {
+            satSet.loadTLEs(jsTLEfile);
+          }, true);
         });
       });
       jsTLEfile = null;
     } catch (e) {
+      console.warn(5);
       satSet.loadTLEs(jsTLEfile);
       jsTLEfile = null;
     }
@@ -385,17 +398,6 @@ var emptyMat4 = mat4.create();
                     }
                 }
             })();
-
-            if (!settingsManager.disableUI && !settingsManager.isDrawLess) {
-              // Load Optional 3D models if available
-              if (typeof meshManager !== 'undefined') {
-                setTimeout(function () {
-                  meshManager.init();
-                }, 0);
-                settingsManager.selectedColor = [0.0, 0.0, 0.0, 0.0];
-              }
-            }
-
             if (settingsManager.startWithOrbitsDisplayed) {
                 setTimeout(function () {
                     // Time Machine
@@ -619,6 +621,10 @@ var emptyMat4 = mat4.create();
                 var year;
                 var prefix;
                 var rest;
+
+                if (settingsManager.offline) {
+                  resp = JSON.parse(resp);
+                }
 
                 for (var i = 0; i < resp.length; i++) {
                     resp[i].SCC_NUM = pad0(resp[i].TLE1.substr(2, 5).trim(), 5);
@@ -915,13 +921,7 @@ var emptyMat4 = mat4.create();
             );
 
             starBuf = gl.createBuffer();
-            starBufData = satSet.setupStarData(satData);
-            gl.bindBuffer(gl.ARRAY_BUFFER, starBuf);
-            gl.bufferData(
-                gl.ARRAY_BUFFER,
-                new Float32Array(starBufData),
-                gl.STATIC_DRAW
-            );
+            satSet.setupStarBuffer();
 
             satSet.numSats = satData.length;
             satSet.setColorScheme(ColorScheme.default, true);
@@ -978,17 +978,177 @@ var emptyMat4 = mat4.create();
         }
     };
 
+    satSet.convertIdArrayToSatnumArray = (satIdArray) => {
+      let satnumArray = [];
+      for (let i = 0; i < satIdArray.length; i++) {
+        satnumArray.push(parseInt(satSet.getSat(satIdArray[i]).SCC_NUM));
+      }
+      return satnumArray;
+    };
+
+    satSet.convertSatnumArrayToIdArray = (satnumArray) => {
+      let satIdArray = [];
+      for (let i = 0; i < satnumArray.length; i++) {
+        satIdArray.push(satSet.getSatFromObjNum(satnumArray[i]).id);
+      }
+      return satIdArray;
+    };
+
+    satSet.searchCelestrak = (satNum, analsat) => {
+      // If no Analyst Satellite specified find the first unused one
+      if (typeof analsat == 'undefined') {
+          for (var i = 15000; i < satData.length; i++) {
+            if (satData[i].SCC_NUM >= 80000 && !satData[i].active) {
+                analsat = i;
+                break;
+            }
+          }
+      } else {
+        // Satnum to Id
+        analsat = satSet.getIdFromObjNum(analsat);
+      }
+
+      let request = new XMLHttpRequest();
+      request.open('GET', `php/get_data.php?type=c&sat=${satNum}`, true);
+
+      request.onload = function() {
+        if (this.status >= 200 && this.status < 400) {
+          // Success!
+          let tles = JSON.parse(this.response).split('\n');
+          let TLE1 = tles[1];
+          let TLE2 = tles[2];
+          satSet.insertNewAnalystSatellite(TLE1, TLE2, analsat);
+        } else {
+          // We reached our target server, but it returned an error
+          console.warn('Celestrack request returned an error!');
+        }
+      };
+
+      request.onerror = function() {
+        console.warn('Celestrack request failed!');
+      };
+
+      request.send();
+
+      // $.ajax({
+      //     async:true,
+      //     // dataType : 'jsonp',   //you may use jsonp for cross origin request
+      //     crossDomain:true,
+      //     url: `php/get_data.php?type=c&sat=${satNum}`,
+      //     success: function(data) {
+      //         let tles = data.split('\n');
+      //         let TLE1 = tles[1];
+      //         let TLE2 = tles[2];
+      //         satSet.insertNewAnalystSatellite(TLE1, TLE2, analsat);
+      //     }
+      // });
+    };
+
+    satSet.searchN2yo = (satNum, analsat) => {
+      // If no Analyst Satellite specified find the first unused one
+      if (typeof analsat == 'undefined') {
+          for (var i = 15000; i < satData.length; i++) {
+            if (satData[i].SCC_NUM >= 80000 && !satData[i].active) {
+                analsat = i;
+                break;
+            }
+          }
+      } else {
+        // Satnum to Id
+        analsat = satSet.getIdFromObjNum(analsat);
+      }
+
+      let request = new XMLHttpRequest();
+      request.open('GET', `php/get_data.php?type=n&sat=${satNum}`, true);
+
+      request.onload = function() {
+        if (this.status >= 200 && this.status < 400) {
+          // Success!
+          let tles = this.response.split('<div id="tle">')[1].split('<pre>')[1].split('\n')
+          let TLE1 = tles[0];
+          let TLE2 = tles[1];
+          satSet.insertNewAnalystSatellite(TLE1, TLE2, analsat);
+        } else {
+          // We reached our target server, but it returned an error
+          console.warn('N2YO request returned an error!');
+        }
+      };
+
+      request.onerror = function() {
+        console.warn('N2YO request failed!');
+      };
+
+      request.send();
+
+      // $.ajax({
+      //     async:true,
+      //     // dataType : 'jsonp',   //you may use jsonp for cross origin request
+      //     crossDomain:true,
+      //     url: `php/get_data.php?type=n&sat=${satNum}`,
+      //     success: function(data) {
+      //         let tles = data.split('<div id="tle">')[1].split('\n');
+      //         let TLE1 = tles[2];
+      //         let TLE2 = tles[3];
+      //         satSet.insertNewAnalystSatellite(TLE1, TLE2, analsat);
+      //     }
+      // });
+    };
+
+    satSet.insertNewAnalystSatellite = (TLE1, TLE2, analsat) => {
+      if (
+          satellite.altitudeCheck(
+              TLE1,
+              TLE2,
+              timeManager.propOffset
+          ) > 1
+      ) {
+          satCruncher.postMessage({
+              typ: 'satEdit',
+              id: analsat,
+              active: true,
+              TLE1: TLE1,
+              TLE2: TLE2,
+          });
+          orbitManager.updateOrbitBuffer(analsat, true, TLE1, TLE2);
+          let sat = satSet.getSat(analsat);
+          sat.active = true;
+          sat.OT = 1; // Default to Satellite
+          searchBox.doSearch(sat.SCC_NUM.toString());
+      } else {
+          alert('Failed Altitude Check');
+      }
+    };
+
+    satSet.setupStarBuffer = () => {
+      let starBufData = satSet.setupStarData(satData);
+      gl.bindBuffer(gl.ARRAY_BUFFER, starBuf);
+      gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array(starBufData),
+          gl.STATIC_DRAW
+      );
+    };
+
     satSet.setupStarData = (satData) => {
         let starArray = [];
         for (var i = 0; i < satData.length; i++) {
             if (
                 i >= objectManager.starIndex1 &&
-                i <= objectManager.starIndex2
+                true
+                // i <= objectManager.starIndex2
             ) {
                 starArray.push(1.0);
             } else {
                 starArray.push(0.0);
             }
+        }
+        // Pretend Satellites that are currently being searched are stars
+        // The shaders will display these "stars" like close satellites
+        // because the distance from the center of the earth is too close to
+        // be a star. This method is so there are less buffers needed but as
+        // computers get faster it should be replaced
+        for (let i = 0; i < settingsManager.lastSearchResults.length; i++) {
+          starArray[settingsManager.lastSearchResults[i]] = 1.0;
         }
         return starArray;
     };
@@ -2024,28 +2184,32 @@ var emptyMat4 = mat4.create();
             satelliteSelected: [i],
         });
         if (settingsManager.isMobileModeEnabled) mobile.searchToggle(false);
-        gl.bindBuffer(gl.ARRAY_BUFFER, satColorBuf);
-        // If Old Select Sat Picked Color it Correct Color
-        if (objectManager.selectedSat !== -1) {
-            gl.bufferSubData(
-                gl.ARRAY_BUFFER,
-                objectManager.selectedSat * 4 * 4,
-                new Float32Array(
-                    settingsManager.currentColorScheme.colorizer(
-                        satSet.getSat(objectManager.selectedSat)
-                    ).color
-                )
-            );
+
+        if (typeof meshManager !== 'undefined') {
+          gl.bindBuffer(gl.ARRAY_BUFFER, satColorBuf);
+          // If Old Select Sat Picked Color it Correct Color
+          if (objectManager.selectedSat !== -1) {
+              gl.bufferSubData(
+                  gl.ARRAY_BUFFER,
+                  objectManager.selectedSat * 4 * 4,
+                  new Float32Array(
+                      settingsManager.currentColorScheme.colorizer(
+                          satSet.getSat(objectManager.selectedSat)
+                      ).color
+                  )
+              );
+          }
+          // If New Select Sat Picked Color it
+          if (i !== -1) {
+              isSatView = true;
+              gl.bufferSubData(
+                  gl.ARRAY_BUFFER,
+                  i * 4 * 4,
+                  new Float32Array(settingsManager.selectedColor)
+              );
+          }
         }
-        // If New Select Sat Picked Color it
-        if (i !== -1) {
-            isSatView = true;
-            gl.bufferSubData(
-                gl.ARRAY_BUFFER,
-                i * 4 * 4,
-                new Float32Array(settingsManager.selectedColor)
-            );
-        }
+
         objectManager.selectedSat = i;
 
         if (

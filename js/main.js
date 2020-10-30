@@ -230,6 +230,15 @@ function initializeKeepTrack() {
     satSet.init(function satSetInitCallBack(satData) {
         orbitManager.init();
         groups.init();
+        setTimeout(function () {
+          earth.loadHiRes();
+          earth.loadHiResNight();
+          if(!settingsManager.offline && 'serviceWorker' in navigator) {
+            navigator.serviceWorker
+            .register('./serviceWorker.js')
+            .then(function() { console.log("Service Worker Registered"); });
+          }
+        }, 0);
         if (!settingsManager.disableUI) {
             searchBox.init(satData);
         }
@@ -244,8 +253,8 @@ function initializeKeepTrack() {
         (function _finalLoadingSequence() {
             if (
                 !isFinalLoadingComplete &&
-                !earth.loaded &&
-                settingsManager.cruncherReady
+                !earth.loaded
+                // && settingsManager.cruncherReady
             ) {
                 setTimeout(function () {
                     _finalLoadingSequence();
@@ -284,7 +293,7 @@ function initializeKeepTrack() {
                         $('#logo-trusat').hide();
                         $('#loading-screen').hide();
                         $('#loader-text').html('Attempting to Math...');
-                    }, 5000);
+                    }, 3000);
                 } else {
                     setTimeout(function () {
                         $('#loading-screen').removeClass('full-loader');
@@ -294,7 +303,7 @@ function initializeKeepTrack() {
                         $('#logo-trusat').hide();
                         $('#loading-screen').hide();
                         $('#loader-text').html('Attempting to Math...');
-                    }, 2000);
+                    }, 1500);
                 }
             }
 
@@ -313,9 +322,20 @@ function initializeKeepTrack() {
                 $('#map-image').width(settingsManager.mapHeight);
                 $('#map-menu').width($(window).width());
             }
+
+            satLinkManager.idToSatnum();
         })();
     });
     drawLoop(); // kick off the animationFrame()s
+    if (!settingsManager.disableUI && !settingsManager.isDrawLess) {
+      // Load Optional 3D models if available
+      if (typeof meshManager !== 'undefined') {
+        setTimeout(function () {
+          meshManager.init();
+        }, 0);
+        settingsManager.selectedColor = [0.0, 0.0, 0.0, 0.0];
+      }
+    }
 }
 
 // //////////////////////////////////////////////////////////////////////////
@@ -754,8 +774,15 @@ function drawLoop() {
         let sat = satSet.getSat(objectManager.selectedSat);
         if (!sat.static) {
             _camSnapToSat(sat);
+
+            if (sat.missile || typeof meshManager == 'undefined') {
+              settingsManager.selectedColor = [1.0, 0.0, 0.0, 1.0];
+            } else {
+              settingsManager.selectedColor = [0.0, 0.0, 0.0, 0.0];
+            }
+
             // If 3D Models Available, then update their position on the screen
-            if (typeof meshManager !== 'undefined') {
+            if (typeof meshManager !== 'undefined' && !sat.missile) {
                 // Try to reduce some jitter
                 if (
                     meshManager.selectedSatPosition.x > sat.position.x - 1 &&
@@ -932,6 +959,11 @@ function _camSnapToSat(sat) {
             camZoomSnappedOnSat = false;
             camAngleSnappedOnSat = false;
         }
+
+        camDistTarget = (camDistTarget < settingsManager.minZoomDistance)
+          ? settingsManager.minZoomDistance + 10
+          : camDistTarget;
+
         zoomTarget = Math.pow(
             (camDistTarget - settingsManager.minZoomDistance) /
                 (settingsManager.maxZoomDistance -
@@ -961,12 +993,12 @@ function _drawScene() {
     // gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+    earth.update();
     if (!settingsManager.enableLimitedUI && !settingsManager.isDrawLess) {
         sun.draw(pMatrix, camMatrix);
         // Disabling Moon Until it is Fixed
         // moon.draw(pMatrix, camMatrix);
     }
-    earth.update();
     if (!settingsManager.enableLimitedUI && !settingsManager.isDrawLess) {
         atmosphere.update();
         atmosphere.draw(pMatrix, camMatrix);
@@ -977,7 +1009,7 @@ function _drawScene() {
 
     // Draw Satellite if Selected
     (function drawSatellite() {
-        if (objectManager.selectedSat !== -1 && meshManager.isReady) {
+        if (objectManager.selectedSat !== -1 && typeof meshManager != 'undefined' && meshManager.isReady) {
             let sat = satSet.getSat(objectManager.selectedSat);
             // If 3D Models Available, then draw them on the screen
             if (typeof meshManager !== 'undefined') {
@@ -1869,29 +1901,47 @@ function _hoverBoxOnSat(satId, satX, satY) {
                     satHoverBoxNode2.textContent = sat.SCC_NUM;
                     satHoverBoxNode3.innerHTML =
                         satellite.nextpass(sat) +
-                        satellite.distance(sat, objectManager.selectedSatData) +
+                        satellite.distance(sat, satSet.getSat(objectManager.selectedSat)) +
                         '';
                 } else if (isShowDistance) {
                     satHoverBoxNode1.textContent = sat.ON;
+                    sat2 = satSet.getSat(objectManager.selectedSat);
                     satHoverBoxNode2.innerHTML =
                         sat.SCC_NUM +
-                        satellite.distance(sat, objectManager.selectedSatData) +
+                        satellite.distance(sat, sat2) +
                         '';
-                    satHoverBoxNode3.innerHTML =
-                        'X: ' +
-                        sat.position.x.toFixed(2) +
-                        ' Y: ' +
-                        sat.position.y.toFixed(2) +
-                        ' Z: ' +
-                        sat.position.z.toFixed(2) +
-                        '</br>' +
-                        'X: ' +
-                        sat.velocityX.toFixed(2) +
-                        'km/s Y: ' +
-                        sat.velocityY.toFixed(2) +
-                        'km/s Z: ' +
-                        sat.velocityZ.toFixed(2) +
-                        'km/s';
+                    if (sat2 !== null && sat !== sat2) {
+                      satHoverBoxNode3.innerHTML =
+                          'X: ' +
+                          sat.position.x.toFixed(2) +
+                          ' Y: ' +
+                          sat.position.y.toFixed(2) +
+                          ' Z: ' +
+                          sat.position.z.toFixed(2) +
+                          '</br>' +
+                          'ΔX: ' +
+                          (sat.velocityX - sat2.velocityX).toFixed(2) +
+                          'km/s ΔY: ' +
+                          (sat.velocityY - sat2.velocityY).toFixed(2) +
+                          'km/s ΔZ: ' +
+                          (sat.velocityZ - sat2.velocityZ).toFixed(2) +
+                          'km/s';
+                    } else {
+                      satHoverBoxNode3.innerHTML =
+                          'X: ' +
+                          sat.position.x.toFixed(2) +
+                          ' Y: ' +
+                          sat.position.y.toFixed(2) +
+                          ' Z: ' +
+                          sat.position.z.toFixed(2) +
+                          '</br>' +
+                          'X: ' +
+                          sat.velocityX.toFixed(2) +
+                          ' Y: ' +
+                          sat.velocityY.toFixed(2) +
+                          ' Z: ' +
+                          sat.velocityZ.toFixed(2);
+                    }
                 } else if (
                     objectManager.isSensorManagerLoaded &&
                     sensorManager.checkSensorSelected() &&
@@ -2066,26 +2116,37 @@ function webGlInit() {
         );
     }
 
-    // Desynchronized Fixed Jitter on Old Computer
-    gl =
-        can.getContext('webgl', {
-            alpha: true,
-            premultipliedAlpha: false,
-            desynchronized: true,
-            antialias: true,
-            powerPreference: 'high-performance',
-            preserveDrawingBuffer: true,
-            stencil: false,
-        }) || // Or...
-        can.getContext('experimental-webgl', {
-            alpha: true,
-            premultipliedAlpha: false,
-            desynchronized: true,
-            antialias: true,
-            powerPreference: 'high-performance',
-            preserveDrawingBuffer: true,
-            stencil: false,
-        });
+    if (!settingsManager.disableUI) {
+      gl =
+      can.getContext('webgl', {
+        alpha: false,
+        premultipliedAlpha: false,
+        desynchronized: true, // Desynchronized Fixed Jitter on Old Computer
+        antialias: true,
+        powerPreference: 'high-performance',
+        preserveDrawingBuffer: true,
+        stencil: false,
+      }) || // Or...
+      can.getContext('experimental-webgl', {
+        alpha: false,
+        premultipliedAlpha: false,
+        desynchronized: true, // Desynchronized Fixed Jitter on Old Computer
+        antialias: true,
+        powerPreference: 'high-performance',
+        preserveDrawingBuffer: true,
+        stencil: false,
+      });
+    } else {
+      gl =
+      can.getContext('webgl', {
+        alpha: false,
+        desynchronized: true, // Desynchronized Fixed Jitter on Old Computer
+      }) || // Or...
+      can.getContext('experimental-webgl', {
+        alpha: false,
+        desynchronized: true, // Desynchronized Fixed Jitter on Old Computer
+      });
+    }
     if (!gl) {
         browserUnsupported();
     }
@@ -2365,6 +2426,14 @@ function selectSat(satId) {
         }
     }
 
+    if (satId !== -1 || (satId == -1 && !isselectedSatNegativeOne)) {
+      for (var i = 0; i < drawLineList.length; i++) {
+        if (drawLineList[i].isDrawWhenSelected) {
+          drawLineList.splice(i,1);
+        }
+      }
+    }
+
     if (satId === -1 && !isselectedSatNegativeOne) {
         isselectedSatNegativeOne = true;
         $('#sat-infobox').fadeOut();
@@ -2417,7 +2486,9 @@ function selectSat(satId) {
             1000
         );
 
-        $('#search-results').attr('style', 'max-height:auto');
+        if ($('#search').val().length > 0) {
+          $('#search-results').attr('style', 'display: block; max-height:auto');
+        }
 
         // Toggle the side menus as closed
         isEditSatMenuOpen = false;
@@ -2428,7 +2499,7 @@ function selectSat(satId) {
         isBreakupMenuOpen = false;
         isMissileMenuOpen = false;
         isCustomSensorMenuOpen = false;
-    } else {
+    } else if (satId !== -1) {
         cameraManager.isChasing = true;
         isselectedSatNegativeOne = false;
         objectManager.selectedSat = satId;
@@ -2482,10 +2553,12 @@ function selectSat(satId) {
         if ($('#search-results').css('display') === 'block') {
             if (window.innerWidth <= 1000) {
             } else {
-                $('#search-results').attr(
-                    'style',
-                    'display:block max-height:28%'
-                );
+                if ($('#search').val().length > 0) {
+                  $('#search-results').attr(
+                      'style',
+                      'display:block; max-height:28%'
+                  );
+                }
                 if (cameraType.current !== cameraType.PLANETARIUM) {
                     // Unclear why this was needed...
                     // uiManager.legendMenuChange('default')
@@ -2494,7 +2567,12 @@ function selectSat(satId) {
         } else {
             if (window.innerWidth <= 1000) {
             } else {
-                $('#search-results').attr('style', 'max-height:auto');
+                if ($('#search').val().length > 0) {
+                  $('#search-results').attr(
+                    'style',
+                    'display:block; max-height:auto'
+                  );
+                }
                 if (cameraType.current !== cameraType.PLANETARIUM) {
                     // Unclear why this was needed...
                     // uiManager.legendMenuChange('default')
@@ -2861,10 +2939,29 @@ function selectSat(satId) {
 
         if (
             objectManager.isSensorManagerLoaded &&
-            sensorManager.checkSensorSelected() &&
-            isLookanglesMenuOpen
+            sensorManager.checkSensorSelected()
         ) {
+          if (isLookanglesMenuOpen) {
             satellite.getlookangles(sat);
+          }
+          let isLineDrawnToSat = false;
+          for (var i = 0; i < drawLineList.length; i++) {
+            if (drawLineList[i].sat.id == satId) {
+              isLineDrawnToSat = true;
+            }
+          }
+          if (!isLineDrawnToSat) {
+            debugDrawLine(
+              'sat4',
+              [
+                satId,
+                satSet.getIdFromSensorName(
+                  sensorManager.currentSensor.name
+                ),
+              ],
+              'g'
+            );
+          }
         }
     }
 
@@ -2992,6 +3089,36 @@ function debugDrawLine(type, value, color) {
             ref: [sat.position.x, sat.position.y, sat.position.z],
             ref2: [sat2.position.x, sat2.position.y, sat2.position.z],
             color: color,
+            isOnlyInFOV: true,
+            isDrawWhenSelected: false,
+        });
+    }
+    if (type == 'sat4') {
+        let sat = satSet.getSat(value[0]);
+        var sat2 = satSet.getSat(value[1]);
+        drawLineList.push({
+            line: new Line(),
+            sat: sat,
+            sat2: sat2,
+            ref: [sat.position.x, sat.position.y, sat.position.z],
+            ref2: [sat2.position.x, sat2.position.y, sat2.position.z],
+            color: color,
+            isOnlyInFOV: true,
+            isDrawWhenSelected: true,
+        });
+    }
+    if (type == 'sat5') {
+        let sat = satSet.getSat(value[0]);
+        var sat2 = satSet.getSat(value[1]);
+        drawLineList.push({
+            line: new Line(),
+            sat: sat,
+            sat2: sat2,
+            ref: [sat.position.x, sat.position.y, sat.position.z],
+            ref2: [sat2.position.x, sat2.position.y, sat2.position.z],
+            color: color,
+            isOnlyInFOV: false,
+            isDrawWhenSelected: false,
         });
     }
     if (type == 'ref') {
@@ -3035,9 +3162,13 @@ function drawLines() {
                             drawLineList[drawLinesI].sat2.name
                         );
                     }
-                    drawLineList[drawLinesI].sat2 = satSet.getSatPosOnly(
+                    drawLineList[drawLinesI].sat2 = satSet.getSat(
                         drawLineList[drawLinesI].sat2.id
                     );
+                    if (drawLineList[drawLinesI].isOnlyInFOV && !drawLineList[drawLinesI].sat.getTEARR().inview) {
+                      drawLineList.splice(drawLinesI,1);
+                      continue;
+                    }
                     drawLineList[drawLinesI].line.set(
                         [
                             drawLineList[drawLinesI].sat.position.x,
@@ -3316,11 +3447,24 @@ $(document).ready(function () {
                     zoomTarget = Math.min(Math.max(zoomTarget, 0.001), 1); // Force between 0 and 1
                     camZoomSnappedOnSat = false;
                 } else {
-                    settingsManager.camDistBuffer += delta / 100; // delta is +/- 100
+                  if (settingsManager.camDistBuffer < 300 || settingsManager.nearZoomLevel == -1) {
+                    settingsManager.camDistBuffer += delta / 7.5; // delta is +/- 100
                     settingsManager.camDistBuffer = Math.min(
                         Math.max(settingsManager.camDistBuffer, 30),
                         300
                     );
+                    settingsManager.nearZoomLevel = zoomLevel;
+                  }
+                  if (settingsManager.camDistBuffer >= 300) {
+                    zoomTarget += delta / 100 / 50 / speedModifier; // delta is +/- 100
+                    zoomTarget = Math.min(Math.max(zoomTarget, 0.001), 1); // Force between 0 and 1
+                    camZoomSnappedOnSat = false;
+                    if (zoomTarget < settingsManager.nearZoomLevel) {
+                      camZoomSnappedOnSat = true;
+                      camAngleSnappedOnSat = true;
+                      settingsManager.camDistBuffer = 200;
+                    }
+                  }
                 }
 
                 if (
@@ -3693,6 +3837,7 @@ $(document).ready(function () {
             _hidePopUps();
         });
         function _hidePopUps() {
+            if (settingsManager.isPreventColorboxClose == true) return;
             rightBtnMenuDOM.hide();
             uiManager.clearRMBSubMenu();
             if ($('#colorbox').css('display') === 'block') {
@@ -4031,7 +4176,7 @@ $(document).ready(function () {
                         $('#dops-lon').val(latLon.longitude.toFixed(3));
                         $('#dops-alt').val(0);
                         $('#dops-el').val(settingsManager.gpsElevationMask);
-                        _bottomIconPress({
+                        uiManager.bottomIconPress({
                             currentTarget: { id: 'menu-dops' },
                         });
                     } else {
@@ -4060,7 +4205,7 @@ $(document).ready(function () {
                 case 'edit-sat-rmb':
                     selectSat(clickedSat);
                     if (!isEditSatMenuOpen) {
-                        _bottomIconPress({
+                        uiManager.bottomIconPress({
                             currentTarget: { id: 'menu-editSat' },
                         });
                     }
@@ -4108,7 +4253,7 @@ $(document).ready(function () {
                 case 'line-sensor-sat-rmb':
                     // Sensor always has to be #2
                     debugDrawLine(
-                        'sat3',
+                        'sat5',
                         [
                             clickedSat,
                             satSet.getIdFromSensorName(
@@ -4320,7 +4465,15 @@ $(document).ready(function () {
                     break;
                 case 'clear-screen-rmb':
                     (function clearScreenRMB() {
-                        searchBox.hideResults();
+                        // Clear Lines first
+                        drawLineList = [];
+                        if (objectManager.isStarManagerLoaded) {
+                            starManager.isAllConstellationVisible = false;
+                        }
+
+                        // Now clear everything else
+                        searchBox.doSearch('');
+                        mobile.searchToggle(false);
                         uiManager.hideSideMenus();
                         isMilSatSelected = false;
                         $('#menu-space-stations').removeClass(

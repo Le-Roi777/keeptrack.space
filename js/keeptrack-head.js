@@ -19,8 +19,8 @@ const MOON_SCALAR_DISTANCE = 250000;
     let settingsManager = {};
 
     //  Version Control
-    settingsManager.versionNumber = '1.20.1';
-    settingsManager.versionDate = 'September 15, 2020';
+    settingsManager.versionNumber = '1.20.12';
+    settingsManager.versionDate = 'October 22, 2020';
 
     // Install Folder Settings
     {
@@ -37,6 +37,9 @@ const MOON_SCALAR_DISTANCE = 250000;
             case 'thkruz.github.io':
                 settingsManager.installDirectory = '/keeptrack.space/';
                 break;
+            case '':
+              settingsManager.offline = true;
+              settingsManager.installDirectory = './';
         }
         if (typeof settingsManager.installDirectory == 'undefined') {
             // Put Your Custom Install Directory Here
@@ -68,7 +71,7 @@ const MOON_SCALAR_DISTANCE = 250000;
     // movement
     settingsManager.disableCameraControls = false;
     // Disable normal browser events from keyboard/mouse
-    settingsManager.disableNormalEvents = true;
+    settingsManager.disableNormalEvents = false;
     // Enable limited UI features
     settingsManager.enableLimitedUI = false;
     // Allows canvas will steal focus on load
@@ -110,6 +113,12 @@ const MOON_SCALAR_DISTANCE = 250000;
     // Use to Override TLE Settings
     // settingsManager.tleSource = settingsManager.installDirectory + 'tle/TLEdebris.json'
 
+    // Use these to default smallest resolution maps and limited "extras" like
+    // the atmosphere and sun. Really useful on small screens and for faster
+    // loading times
+    // settingsManager.isDrawLess = true;
+    // settingsManager.smallImages = true;
+
     // //////////////////////////////////////////////////////////////////////////
     // Mobile Settings
     // //////////////////////////////////////////////////////////////////////////
@@ -117,7 +126,7 @@ const MOON_SCALAR_DISTANCE = 250000;
     settingsManager.isMobileModeEnabled = false;
     if (window.innerWidth <= settingsManager.desktopMinimumWidth) {
         settingsManager.isMobileModeEnabled = true;
-        settingsManager.smallImages = true;
+        // settingsManager.smallImages = true;
         settingsManager.isDrawLess = true;
         settingsManager.camDistBuffer = 100;
     }
@@ -476,6 +485,8 @@ const MOON_SCALAR_DISTANCE = 250000;
     settingsManager.isMapUpdateOverride = false;
     settingsManager.lastMapUpdateTime = 0;
 
+    settingsManager.lastSearchResults = [];
+
     // Export settingsManager to everyone else
     window.settingsManager = settingsManager;
 }
@@ -498,12 +509,6 @@ if (!settingsManager.disableUI) {
                 case 'hires':
                     settingsManager.hiresImages = true;
                     settingsManager.minimumDrawDt = 0.01667;
-                    document.write(`
-                  <link rel="preload" href="textures/earthmap8k.jpg" as="image">
-                  <link rel="preload" href="textures/earthlights10k.jpg" as="image">
-                  <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-                  <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-                  `);
                     break;
                 case 'draw-less':
                     settingsManager.isDrawLess = true;
@@ -515,12 +520,6 @@ if (!settingsManager.disableUI) {
                     break;
                 case 'vec':
                     settingsManager.vectorImages = true;
-                    document.write(`
-                  <link rel="preload" href="textures/dayearthvector-4096.jpg" as="image">
-                  <link rel="preload" href="textures/earthlights4k.jpg" as="image">
-                  <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-                  <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-                  `);
                     break;
                 case 'retro':
                     settingsManager.retro = true;
@@ -565,76 +564,41 @@ if (settingsManager.isLoadLastMap && !settingsManager.isDrawLess) {
     switch (lastMap) {
         case 'blue':
             settingsManager.blueImages = true;
-            document.write(`
-              <link rel="preload" href="textures/world_blue-2048.png" as="image">
-              <link rel="preload" href="textures/earthlights4k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         case 'nasa':
             settingsManager.nasaImages = true;
-            document.write(`
-              <link rel="preload" href="textures/mercator-tex.jpg" as="image">
-              <link rel="preload" href="textures/earthlights4k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         case 'low':
             settingsManager.lowresImages = true;
-            document.write(`
-              <link rel="preload" href="textures/earthmap4k.jpg" as="image">
-              <link rel="preload" href="textures/earthlights4k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         case 'trusat':
             settingsManager.trusatImages = true;
-            document.write(`
-              <link rel="preload" href="textures/trusatvector-4096.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         case 'high':
             settingsManager.hiresImages = true;
-            document.write(`
-              <link rel="preload" href="textures/earthmap8k.jpg" as="image">
-              <link rel="preload" href="textures/earthlights10k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         case 'high-nc':
             settingsManager.hiresNoCloudsImages = true;
-            document.write(`
-              <link rel="preload" href="textures/earthmap8k.jpg" as="image">
-              <link rel="preload" href="textures/earthlights10k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         case 'vec':
             settingsManager.vectorImages = true;
-            document.write(`
-              <link rel="preload" href="textures/dayearthvector-4096.jpg" as="image">
-              <link rel="preload" href="textures/earthlights4k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
         default:
             settingsManager.lowresImages = true;
-            document.write(`
-              <link rel="preload" href="textures/earthmap4k.jpg" as="image">
-              <link rel="preload" href="textures/earthlights4k.jpg" as="image">
-              <link rel="preload" href="textures/earthbump8k.jpg" as="image">
-              <link rel="preload" href="textures/earthspec8k.jpg" as="image">
-              `);
             break;
     }
+}
+
+// Make sure there is some map loaded!
+if (!settingsManager.smallImages &&
+    !settingsManager.nasaImages &&
+    !settingsManager.blueImages &&
+    !settingsManager.lowresImages &&
+    !settingsManager.hiresImages &&
+    !settingsManager.hiresNoCloudsImages &&
+    !settingsManager.vectorImages)
+{
+  settingsManager.lowresImages = true;
 }
 
 //Global Debug Manager
@@ -704,7 +668,6 @@ if (!settingsManager.disableUI) {
 } else if (settingsManager.enableLimitedUI) {
     document.write(`
     <link rel="stylesheet" href="${settingsManager.installDirectory}css/limitedUI.css?v=${settingsManager.versionNumber}" type="text/css"\>
-    <link rel="stylesheet" href="${settingsManager.installDirectory}css/materialize.css?v=${settingsManager.versionNumber}" type="text/css"\>
   `);
 } else {
     console.log('ERROR');
